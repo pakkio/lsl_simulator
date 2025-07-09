@@ -3,12 +3,24 @@ import argparse
 import threading
 from lsl_antlr_parser import LSLParser
 from lsl_simulator import LSLSimulator
+from lsl_dialect import LSLDialect, set_dialect, get_dialect, parse_dialect_flag
 
 def main():
     # --- Command-Line Argument Parsing ---
     parser = argparse.ArgumentParser(description="Parse and simulate an LSL script.")
     parser.add_argument("filename", help="The LSL script file to run (e.g., sample.lsl)")
+    parser.add_argument("--sl", action="store_true", help="Use Second Life dialect (default)")
+    parser.add_argument("--os", action="store_true", help="Use OpenSimulator dialect")
     args = parser.parse_args()
+    
+    # Set dialect based on arguments
+    if args.os:
+        set_dialect(LSLDialect.OPENSIMULATOR)
+    else:
+        set_dialect(LSLDialect.SECONDLIFE)
+    
+    current_dialect = get_dialect()
+    print(f"Using LSL dialect: {current_dialect.value.upper()}")
 
     # --- Read the LSL file ---
     try:

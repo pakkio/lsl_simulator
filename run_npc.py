@@ -13,9 +13,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from lsl_antlr_parser import LSLParser
 from lsl_simulator import LSLSimulator
+from lsl_dialect import LSLDialect, set_dialect, get_dialect, parse_dialect_flag
 
 def run_npc_script():
     """Run the NPC script"""
+    # Set dialect based on command line arguments
+    dialect = parse_dialect_flag()
+    set_dialect(dialect)
+    
+    print(f"Starting NPC script simulation using {dialect.value.upper()} dialect...")
     print("Starting NPC script simulation...")
     
     # Read the NPC script

@@ -17,6 +17,7 @@ from simple_debugger import SimpleDebugger
 from simple_expression_evaluator import SimpleExpressionEvaluator
 from comprehensive_lsl_api import ComprehensiveLSLAPI
 from comprehensive_lsl_api_part2 import ComprehensiveLSLAPIPart2
+from lsl_expanded_api import LSLExpandedAPI
 
 
 class Frame:
@@ -84,6 +85,7 @@ class LSLSimulator:
         # Initialize comprehensive LSL API (270+ functions for 90% coverage)
         self.comprehensive_api = ComprehensiveLSLAPI(self)
         self.comprehensive_api_part2 = ComprehensiveLSLAPIPart2(self)
+        self.expanded_api = LSLExpandedAPI(self)
         
         # Simplified debug mode - minimal threading complexity
         self.debug_mode = debug_mode
@@ -472,6 +474,9 @@ class LSLSimulator:
             # Try comprehensive API part 2
             elif hasattr(self.comprehensive_api_part2, name):
                 return getattr(self.comprehensive_api_part2, name)
+            # Try expanded API
+            elif hasattr(self.expanded_api, name):
+                return getattr(self.expanded_api, name)
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
     
     def say_on_channel(self, channel, message, speaker_name="Unknown", speaker_key="00000000-0000-0000-0000-000000000000"):
