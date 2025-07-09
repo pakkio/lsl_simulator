@@ -1,0 +1,142 @@
+
+import argparse
+import threading
+from lsl_parser import LSLParser
+from lsl_simulator import LSLSimulator
+
+def main():
+    # --- Command-Line Argument Parsing ---
+    parser = argparse.ArgumentParser(description="Parse and simulate an LSL script.")
+    parser.add_argument("filename", help="The LSL script file to run (e.g., sample.lsl)")
+    args = parser.parse_args()
+
+    # --- Read the LSL file ---
+    try:
+        with open(args.filename, "r") as f:
+            lsl_code = f.read()
+    except FileNotFoundError:
+        print(f"Error: File not found at '{args.filename}'")
+        return
+
+    # --- 1. Parse the Script ---
+    print(f"--- Parsing {args.filename} ---")
+    lsl_parser = LSLParser()
+    try:
+        parsed_script = lsl_parser.parse(lsl_code)
+        print("Parsing complete.")
+    except Exception as e:
+        print(f"A parsing error occurred: {e}")
+        return
+
+    # --- 2. Simulate the Script ---
+    simulator = LSLSimulator(parsed_script)
+    
+    # Run the simulator in a separate thread
+    sim_thread = threading.Thread(target=simulator.run)
+    sim_thread.daemon = True
+    sim_thread.start()
+
+    # Give the simulator time to start and process state_entry + notecard reading + registration
+    import time
+    print("Waiting for NPC registration to complete...")
+    
+    # Wait up to 10 seconds for registration to complete
+    max_wait = 10
+    waited = 0
+    while waited < max_wait:
+        time.sleep(1)
+        waited += 1
+        
+        # Check if registration completed (sensing_active should be True)
+        sensing_active = simulator.global_scope.get("sensing_active")
+        is_registered = simulator.global_scope.get("is_registered")
+        
+        if is_registered and sensing_active:
+            print(f"✅ NPC registration completed after {waited} seconds")
+            break
+        elif waited % 5 == 0:
+            print(f"⏳ Still waiting... ({waited}s)")
+    
+    if waited >= max_wait:
+        print("⚠️ Registration may not have completed, continuing anyway...")
+
+    # --- 3. Interactive Loop ---
+    print("--- Interactive session started ---")
+    print("Type 'help' or 'h' for available commands.")
+    print("Type 'quit' or 'q' to exit.")
+    try:
+        while True:
+            command = input("> ").strip().lower()
+            if command in ['quit', 'q']:
+                break
+            
+            cmd_parts = command.split()
+            if not cmd_parts:
+                continue
+                
+            cmd = cmd_parts[0]
+            
+            # Handle abbreviations and full commands
+            if cmd in ['touch', 't']:
+                simulator.event_queue.append(("touch_start", []))
+            elif cmd in ['say', 's']:
+                if len(cmd_parts) > 1:
+                    # Check if second argument is a number (channel)
+                    try:
+                        if len(cmd_parts) > 2:
+                            channel = int(cmd_parts[1])
+                            message = " ".join(cmd_parts[2:])
+                            simulator.say_on_channel(channel, message)
+                        else:
+                            # Only two parts, check if second is a number
+                            channel = int(cmd_parts[1])
+                            print("Usage: say <channel_number> <message> - message is required")
+                    except ValueError:
+                        # Second argument is not a number, treat as message on channel 0
+                        message = " ".join(cmd_parts[1:])
+                        simulator.say_on_channel(0, message)
+                else:
+                    print("Usage: say <channel_number> <message> or say <message> (defaults to channel 0)")
+            elif cmd in ['sense']:
+                if len(cmd_parts) > 1:
+                    avatar_name = " ".join(cmd_parts[1:])
+                    simulator.simulate_avatar_sense(avatar_name)
+                else:
+                    print("Usage: sense <avatar_name>")
+            elif cmd in ['help', 'h']:
+                print("\n=== Available Commands ===")
+                print("help, h          - Show this help message")
+                print("sense <name>     - Simulate avatar approaching (triggers greeting)")
+                print("say, s <msg>     - Send message on channel 0 (public)")
+                print("say, s <ch> <msg> - Send message on specific channel")
+                print("touch, t         - Simulate touching the NPC object")
+                print("quit, q          - Exit the simulator")
+                print("\n=== Typical Conversation Flow ===")
+                print("1. sense John    - John approaches → NPC greets via /hook")
+                print("2. s hello       - John says 'hello' → NPC responds via /talk")
+                print("3. s how are you - Continued conversation")
+                print("4. s goodbye     - End conversation")
+                print("\n=== Other Examples ===")
+                print("sense Alice      - Avatar 'Alice' approaches (key: 000...002)")
+                print("s 0 hello        - Say 'hello' on public channel (explicit)")
+                print("s -98765 START_SENSING - Send control command")
+                print("t                - Touch the NPC")
+                print("h                - Show this help")
+                print("q                - Quit\n")
+                print("💡 Pro Tip: Use 'sense <name>' first to simulate avatar")
+                print("   approaching, then use 's <message>' to chat!")
+            else:
+                print(f"Unknown command: '{command}'. Type 'help' for available commands.")
+
+    except (KeyboardInterrupt, EOFError):
+        print("\nExiting.")
+    finally:
+        simulator.stop()
+        # Wait briefly for the simulator thread to finish
+        sim_thread.join(timeout=0.5)
+    
+    print("--- Simulation Ended ---")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,24 @@
+# <type>: <description>
+#
+# Types:
+#   feat: new feature
+#   fix: bug fix
+#   docs: documentation
+#   style: formatting, no code change
+#   refactor: code restructuring
+#   test: adding/modifying tests
+#   chore: maintenance tasks
+#
+# Rules:
+#   - Use present tense ("add" not "added")
+#   - Use imperative mood ("move" not "moves")
+#   - Keep first line under 72 characters
+#   - Be specific and factual
+#   - Avoid hyperbole or percentages
+#
+# Examples:
+#   feat: add timer event support to simulator
+#   fix: handle null values in expression evaluator
+#   refactor: extract parser logic into separate module
+#   test: add coverage for vector operations
+#   docs: update API documentation for chat functions

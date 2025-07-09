@@ -1,0 +1,42 @@
+[run]
+source = .
+omit = 
+    tests/*
+    .venv/*
+    venv/*
+    */venv/*
+    .pytest_cache/*
+    htmlcov/*
+    .coverage*
+    setup.py
+    conftest.py
+    */tests/*
+    __pycache__/*
+    */__pycache__/*
+    .git/*
+
+branch = True
+parallel = True
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if settings.DEBUG
+    raise AssertionError
+    raise NotImplementedError
+    if 0:
+    if __name__ == .__main__.:
+    class .*\bProtocol\):
+    @(abc\.)?abstractmethod
+
+[html]
+directory = htmlcov
+title = LSL Simulator Coverage Report
+
+[xml]
+output = coverage.xml
