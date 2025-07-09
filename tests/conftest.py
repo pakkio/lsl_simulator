@@ -12,14 +12,14 @@ import sys
 # Add parent directory to Python path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lsl_production_parser import LSLProductionParser
+from lsl_antlr_parser import LSLParser
 from lsl_simulator_simplified import LSLSimulator
 
 
 @pytest.fixture(scope="session")
 def parser():
     """Session-scoped parser fixture to avoid recreation overhead."""
-    return LSLProductionParser()
+    return LSLParser()
 
 
 @pytest.fixture

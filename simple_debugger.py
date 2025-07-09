@@ -82,9 +82,17 @@ class SimpleDebugger:
         """Step to next statement."""
         self.debug_commands.append("step")
     
+    def step(self):
+        """Step to next statement (alias for step_execution)."""
+        self.step_execution()
+    
     def stop_execution(self):
         """Stop execution."""
         self.debug_commands.append("stop")
+    
+    def stop(self):
+        """Stop execution (alias for stop_execution)."""
+        self.stop_execution()
     
     def get_status(self) -> Dict[str, Any]:
         """Get current debug status."""

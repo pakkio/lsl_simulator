@@ -26,12 +26,17 @@ class SimpleExpressionEvaluator:
         if not expr_str:
             return None
         
-        expr_str = str(expr_str).strip()
+        original_expr_str = str(expr_str)
+        expr_str = original_expr_str.strip()
+        
+        # Handle empty string after stripping
+        if not expr_str:
+            return original_expr_str
         
         # Handle most common cases first (performance optimization)
         
         # 1. String literals (very common)
-        if expr_str.startswith('"') and expr_str.endswith('"'):
+        if expr_str.startswith('"') and expr_str.endswith('"') and expr_str.count('"') == 2:
             return expr_str[1:-1]
         
         # 2. Numbers (very common)
@@ -48,8 +53,10 @@ class SimpleExpressionEvaluator:
         if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', expr_str):
             return self._lookup_variable(expr_str)
         
-        # 4. Component access (common in LSL)
-        if '.' in expr_str and not self._is_url_or_ip(expr_str):
+        # 4. Component access (common in LSL) - but not if it's a vector/list literal
+        if ('.' in expr_str and not self._is_url_or_ip(expr_str) and 
+            not (expr_str.startswith('<') and expr_str.endswith('>')) and
+            not (expr_str.startswith('[') and expr_str.endswith(']'))):
             return self._evaluate_component_access(expr_str)
         
         # 5. Function calls (common)
@@ -165,19 +172,25 @@ class SimpleExpressionEvaluator:
             ('%', self._modulo)
         ]
         
-        # Find the first operator (simple left-to-right parsing)
+        # Find the rightmost operator to handle left-to-right evaluation correctly
         for op, func in operators:
-            if op in expr_str:
-                pos = expr_str.find(op)
-                if pos > 0 and pos < len(expr_str) - len(op):
-                    left = expr_str[:pos].strip()
-                    right = expr_str[pos + len(op):].strip()
-                    
-                    # Avoid splitting inside strings or function calls
-                    if not self._is_inside_construct(expr_str, pos):
-                        left_val = self.evaluate(left)
-                        right_val = self.evaluate(right)
-                        return func(left_val, right_val)
+            # Find all occurrences of this operator
+            pos = -1
+            for i in range(len(expr_str) - len(op) + 1):
+                if expr_str[i:i+len(op)] == op:
+                    # Check if this operator is not inside a string or function call
+                    if not self._is_inside_construct(expr_str, i):
+                        pos = i
+                        break  # Take the first valid occurrence
+            
+            if pos >= 0:
+                left = expr_str[:pos].strip()
+                right = expr_str[pos + len(op):].strip()
+                
+                if left and right:  # Make sure we have both operands
+                    left_val = self.evaluate(left)
+                    right_val = self.evaluate(right)
+                    return func(left_val, right_val)
         
         # If no operator found, return as-is
         return expr_str
@@ -208,6 +221,7 @@ class SimpleExpressionEvaluator:
         args = []
         current = ""
         paren_level = 0
+        bracket_level = 0
         in_string = False
         
         for char in args_str:
@@ -218,7 +232,11 @@ class SimpleExpressionEvaluator:
                     paren_level += 1
                 elif char == ')':
                     paren_level -= 1
-                elif char == ',' and paren_level == 0:
+                elif char == '[':
+                    bracket_level += 1
+                elif char == ']':
+                    bracket_level -= 1
+                elif char == ',' and paren_level == 0 and bracket_level == 0:
                     args.append(current.strip())
                     current = ""
                     continue

@@ -12,7 +12,7 @@ import requests
 import math
 import random
 import uuid
-from lsl_production_parser import LSLProductionParser
+from lsl_antlr_parser import LSLParser
 from simple_debugger import SimpleDebugger
 from simple_expression_evaluator import SimpleExpressionEvaluator
 from comprehensive_lsl_api import ComprehensiveLSLAPI
@@ -174,13 +174,51 @@ class LSLSimulator:
         
         for stmt in statements:
             try:
-                result = self._execute_statement(stmt)
+                # Handle both string statements and dictionary statements
+                if isinstance(stmt, str):
+                    result = self._execute_string_statement(stmt)
+                else:
+                    result = self._execute_statement(stmt)
                 if result is not None:
                     return result
             except Exception as e:
                 print(f"⚠️  Statement execution error: {e}")
                 continue
         return None
+
+    def _execute_string_statement(self, stmt_str):
+        """Execute a string statement."""
+        stmt_str = stmt_str.strip()
+        if not stmt_str:
+            return None
+        
+        # Handle return statements
+        if stmt_str.startswith('return'):
+            # Extract the return value
+            if stmt_str == 'return;':
+                return None
+            
+            # Extract expression after 'return'
+            expr_start = stmt_str.find('return') + 6
+            expr_end = stmt_str.rfind(';')
+            if expr_end == -1:
+                expr_end = len(stmt_str)
+            
+            expr = stmt_str[expr_start:expr_end].strip()
+            if expr:
+                return self._evaluate_expression(expr)
+            else:
+                return None
+        
+        # Handle control structures (if, while, for) - these are incomplete statements
+        # that need to be skipped or handled specially
+        if (stmt_str.startswith('if ') or stmt_str.startswith('while ') or 
+            stmt_str.startswith('for ') or stmt_str == '}'):
+            # These are structural elements that don't execute directly
+            return None
+        
+        # Handle other statements as simple statements
+        return self._execute_simple_statement({"type": "simple", "statement": stmt_str})
 
     def _execute_statement(self, stmt):
         """Execute a single statement."""
@@ -311,8 +349,13 @@ class LSLSimulator:
     def _call_api_function(self, func_name, args):
         """Call an API function."""
         try:
+            # Try direct method name first
             if hasattr(self, func_name):
                 func = getattr(self, func_name)
+                return func(*args)
+            # Try with api_ prefix
+            elif hasattr(self, f"api_{func_name}"):
+                func = getattr(self, f"api_{func_name}")
                 return func(*args)
             else:
                 print(f"⚠️  Unknown API function: {func_name}")
@@ -346,6 +389,12 @@ class LSLSimulator:
         try:
             # Execute function body
             result = self._execute_statements(func_def.get("body", []))
+            
+            # If the function is void and no explicit return, return None
+            if func_def.get("return_type") == "void" and result is not None:
+                # For void functions, ignore any non-None return values
+                return None
+            
             return result
         finally:
             # Pop frame from call stack

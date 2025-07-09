@@ -4,7 +4,7 @@ Tests parsing capabilities with proper assertions and edge cases.
 """
 
 import pytest
-from lsl_production_parser import LSLProductionParser
+from lsl_antlr_parser import LSLParser
 
 
 class TestLSLProductionParser:
@@ -13,7 +13,7 @@ class TestLSLProductionParser:
     def test_parser_initialization(self, parser):
         """Test parser initializes correctly."""
         assert parser is not None
-        assert isinstance(parser, LSLProductionParser)
+        assert isinstance(parser, LSLParser)
         assert parser.errors == []
     
     @pytest.mark.parametrize("script_name,expected_globals", [

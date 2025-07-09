@@ -1,7 +1,7 @@
 
 import argparse
 import threading
-from lsl_parser import LSLParser
+from lsl_antlr_parser import LSLParser
 from lsl_simulator import LSLSimulator
 
 def main():

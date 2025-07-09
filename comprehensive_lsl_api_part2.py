@@ -64,11 +64,11 @@ class ComprehensiveLSLAPIPart2:
                 response = requests.get(url, headers=headers, timeout=30)
             
             metadata = [f"status:{response.status_code}"]
-            self.simulator.event_queue.put(("http_response", [request_key, response.status_code, metadata, response.text]))
+            self.simulator.event_queue.append(("http_response", [request_key, response.status_code, metadata, response.text]))
             
         except Exception as e:
             print(f"[llHTTPRequest ERROR]: {e}")
-            self.simulator.event_queue.put(("http_response", [request_key, 499, [], ""]))
+            self.simulator.event_queue.append(("http_response", [request_key, 499, [], ""]))
         
         return request_key
     
@@ -80,14 +80,14 @@ class ComprehensiveLSLAPIPart2:
         """Request a URL for this object."""
         request_key = f"url-request-{uuid.uuid4().hex[:8]}"
         url = f"http://sim.example.com/cap/{uuid.uuid4()}"
-        self.simulator.event_queue.put(("http_request", [request_key, "GET", "", url]))
+        self.simulator.event_queue.append(("http_request", [request_key, "GET", "", url]))
         return request_key
     
     def api_llRequestSecureURL(self) -> str:
         """Request a secure URL for this object."""
         request_key = f"secure-url-request-{uuid.uuid4().hex[:8]}"
         url = f"https://sim.example.com/cap/{uuid.uuid4()}"
-        self.simulator.event_queue.put(("http_request", [request_key, "GET", "", url]))
+        self.simulator.event_queue.append(("http_request", [request_key, "GET", "", url]))
         return request_key
     
     def api_llReleaseURL(self, url: str) -> None:
@@ -169,7 +169,7 @@ class ComprehensiveLSLAPIPart2:
             def fire_timer():
                 import time as time_module
                 time_module.sleep(float(time_interval))
-                self.simulator.event_queue.put(("timer", []))
+                self.simulator.event_queue.append(("timer", []))
             
             import threading
             thread = threading.Thread(target=fire_timer)
@@ -445,9 +445,9 @@ class ComprehensiveLSLAPIPart2:
         print(f"[llSensor]: Scanning for {name} in {range_val}m")
         # Simulate detection
         if random.random() < 0.5:  # 50% chance of detection
-            self.simulator.event_queue.put(("sensor", [1]))
+            self.simulator.event_queue.append(("sensor", [1]))
         else:
-            self.simulator.event_queue.put(("no_sensor", []))
+            self.simulator.event_queue.append(("no_sensor", []))
     
     def api_llSensorRepeat(self, name: str, key: str, type_filter: int, range_val: float, arc: float, rate: float) -> None:
         """Repeating sensor."""
@@ -653,19 +653,19 @@ class ComprehensiveLSLAPIPart2:
         else:
             value = "0"
         
-        self.simulator.event_queue.put(("dataserver", [request_key, value]))
+        self.simulator.event_queue.append(("dataserver", [request_key, value]))
         return request_key
     
     def api_llRequestDisplayName(self, avatar: str) -> str:
         """Request avatar display name."""
         request_key = f"display-name-{uuid.uuid4().hex[:8]}"
-        self.simulator.event_queue.put(("dataserver", [request_key, "Test User"]))
+        self.simulator.event_queue.append(("dataserver", [request_key, "Test User"]))
         return request_key
     
     def api_llRequestUsername(self, avatar: str) -> str:
         """Request avatar username."""
         request_key = f"username-{uuid.uuid4().hex[:8]}"
-        self.simulator.event_queue.put(("dataserver", [request_key, "test.user"]))
+        self.simulator.event_queue.append(("dataserver", [request_key, "test.user"]))
         return request_key
     
     def api_llKey2Name(self, key: str) -> str:
@@ -712,7 +712,7 @@ class ComprehensiveLSLAPIPart2:
         """Request permissions from avatar."""
         print(f"[llRequestPermissions]: Requesting {perms} from {avatar}")
         # Simulate automatic grant for testing
-        self.simulator.event_queue.put(("run_time_permissions", [perms]))
+        self.simulator.event_queue.append(("run_time_permissions", [perms]))
     
     def api_llTakeControls(self, controls: int, accept: int, pass_on: int) -> None:
         """Take avatar controls."""
@@ -773,7 +773,7 @@ class ComprehensiveLSLAPIPart2:
     def api_llOpenRemoteDataChannel(self) -> str:
         """Open remote data channel."""
         channel = f"remote-{uuid.uuid4().hex[:8]}"
-        self.simulator.event_queue.put(("remote_data", [1, channel, "", "", 0]))
+        self.simulator.event_queue.append(("remote_data", [1, channel, "", "", 0]))
         return channel
     
     def api_llCloseRemoteDataChannel(self, channel: str) -> None:
@@ -793,7 +793,7 @@ class ComprehensiveLSLAPIPart2:
     def api_llGetNextEmail(self, address: str, subject: str) -> None:
         """Get next email."""
         print(f"[llGetNextEmail]: Checking {address}")
-        self.simulator.event_queue.put(("email", ["", "", "", "", 0]))
+        self.simulator.event_queue.append(("email", ["", "", "", "", 0]))
     
     def api_llDie(self) -> None:
         """Delete object."""

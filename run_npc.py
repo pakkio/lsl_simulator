@@ -11,7 +11,7 @@ import threading
 # Add the current directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from lsl_parser import LSLParser
+from lsl_antlr_parser import LSLParser
 from lsl_simulator import LSLSimulator
 
 def run_npc_script():

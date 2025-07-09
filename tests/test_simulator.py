@@ -113,7 +113,7 @@ class TestLSLSimulator:
     
     def test_simulator_initialization(self, sample_lsl_scripts):
         """Test simulator initialization."""
-        from lsl_production_parser import LSLProductionParser
+        from lsl_antlr_parser import LSLParser as LSLProductionParser
         
         parser = LSLProductionParser()
         parsed = parser.parse_script(sample_lsl_scripts["minimal"])
@@ -129,7 +129,7 @@ class TestLSLSimulator:
     
     def test_simulator_with_debug(self, sample_lsl_scripts):
         """Test simulator initialization with debug mode."""
-        from lsl_production_parser import LSLProductionParser
+        from lsl_antlr_parser import LSLParser as LSLProductionParser
         
         parser = LSLProductionParser()
         parsed = parser.parse_script(sample_lsl_scripts["minimal"])
@@ -152,7 +152,7 @@ class TestLSLSimulator:
     
     def test_global_variable_initialization(self, sample_lsl_scripts):
         """Test global variable initialization."""
-        from lsl_production_parser import LSLProductionParser
+        from lsl_antlr_parser import LSLParser as LSLProductionParser
         
         parser = LSLProductionParser()
         parsed = parser.parse_script(sample_lsl_scripts["with_globals"])
@@ -235,7 +235,7 @@ class TestLSLSimulator:
     
     def test_user_function_definition_and_call(self, sample_lsl_scripts):
         """Test user-defined function calls."""
-        from lsl_production_parser import LSLProductionParser
+        from lsl_antlr_parser import LSLParser as LSLProductionParser
         
         parser = LSLProductionParser()
         parsed = parser.parse_script(sample_lsl_scripts["with_functions"])
@@ -251,7 +251,7 @@ class TestLSLSimulator:
     
     def test_event_triggering(self, sample_lsl_scripts):
         """Test event triggering mechanism."""
-        from lsl_production_parser import LSLProductionParser
+        from lsl_antlr_parser import LSLParser as LSLProductionParser
         
         parser = LSLProductionParser()
         parsed = parser.parse_script(sample_lsl_scripts["minimal"])
@@ -294,7 +294,7 @@ class TestLSLSimulator:
     
     def test_variable_scoping(self, sample_lsl_scripts):
         """Test variable scoping in function calls."""
-        from lsl_production_parser import LSLProductionParser
+        from lsl_antlr_parser import LSLParser as LSLProductionParser
         
         parser = LSLProductionParser()
         script = '''
@@ -516,7 +516,7 @@ class TestLSLSimulator:
     
     def test_complex_script_execution(self, sample_lsl_scripts):
         """Test execution of complex script."""
-        from lsl_production_parser import LSLProductionParser
+        from lsl_antlr_parser import LSLParser as LSLProductionParser
         
         parser = LSLProductionParser()
         parsed = parser.parse_script(sample_lsl_scripts["complex_npc"])
