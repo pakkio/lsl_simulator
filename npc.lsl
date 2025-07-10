@@ -585,10 +585,36 @@ string get_status_message() {
     // Generates a status message with current script information.
     string msg = "";
     msg += "• Mode: NPC\n";
-    msg += "• Profile: " + (npc_profile_data != "" ? "Loaded" : "Missing") + "\n";
-    msg += "• Registered: " + (is_registered ? "Yes" : "No") + "\n";
-    msg += "• Sensing: " + (sensing_active ? "Active" : "Inactive") + "\n";
-    msg += "• NPC UUID: " + (npc != NULL_KEY ? (string)npc : "None") + "\n";
-    msg += "• Current Chat: " + (current_avatar != NULL_KEY ? llKey2Name(current_avatar) : "None");
+    
+    if (npc_profile_data != "") {
+        msg += "• Profile: Loaded\n";
+    } else {
+        msg += "• Profile: Missing\n";
+    }
+    
+    if (is_registered) {
+        msg += "• Registered: Yes\n";
+    } else {
+        msg += "• Registered: No\n";
+    }
+    
+    if (sensing_active) {
+        msg += "• Sensing: Active\n";
+    } else {
+        msg += "• Sensing: Inactive\n";
+    }
+    
+    if (npc != NULL_KEY) {
+        msg += "• NPC UUID: " + (string)npc + "\n";
+    } else {
+        msg += "• NPC UUID: None\n";
+    }
+    
+    if (current_avatar != NULL_KEY) {
+        msg += "• Current Chat: " + llKey2Name(current_avatar);
+    } else {
+        msg += "• Current Chat: None";
+    }
+    
     return msg;
 }
