@@ -26,7 +26,7 @@ def run_npc_script():
     
     # Read the NPC script
     try:
-        with open('npc.lsl', 'r') as f:
+        with open('npc_final.lsl', 'r') as f:
             npc_script = f.read()
         print("✓ NPC script loaded")
     except Exception as e:

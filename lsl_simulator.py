@@ -67,6 +67,9 @@ class LSLSimulator:
         self.single_step = False
         self.avatar_counter = 0  # Counter for sequential avatar keys (protected by counter_lock)
         
+        # Sensor detection data for llDetectedKey/llDetectedDist functions
+        self.detected_avatars = []  # List of detected avatar data: [{"key": "...", "name": "...", "distance": 2.5}, ...]
+        
         # Initialize new modular expression evaluation system with optimizations
         self.node_pool = get_global_node_pool()
         self.error_handler = LSLErrorHandler(debug_mode=debug_mode)
@@ -159,14 +162,17 @@ class LSLSimulator:
                 return self.error_handler.handle_parse_error(expr_str, fallback_error)
 
     def _execute_statements(self, statements):
-        for stmt in statements:
+        i = 0
+        while i < len(statements):
             if not self._is_running:
                 break
 
+            stmt = statements[i]
+            
             # Skip empty statements or comments for debugging purposes
             should_debug = True
             if self.debug_mode:
-                stmt_type = stmt.get("type")
+                stmt_type = stmt.get("type") if isinstance(stmt, dict) else None
                 if stmt_type == "simple":
                     statement_text = stmt.get("statement", "")
                     # Skip empty statements or comments
@@ -174,7 +180,7 @@ class LSLSimulator:
                         should_debug = False
 
             self.next_statement_info = stmt
-            line_num = stmt.get("line", -1)
+            line_num = stmt.get("line", -1) if isinstance(stmt, dict) else -1
 
             if self.debug_mode and should_debug and (line_num in self.breakpoints or self.single_step):
                 self.breakpoints.discard(line_num)
@@ -192,6 +198,8 @@ class LSLSimulator:
                 stmt_type = stmt.get("type")
                 if stmt_type == "simple" or stmt_type == "declaration":
                     return_value = self._execute_simple_statement(stmt)
+                elif stmt_type == "assignment":
+                    return_value = self._execute_assignment_statement(stmt)
                 elif stmt_type == "if":
                     return_value = self._execute_if_statement(stmt)
                 elif stmt_type == "while":
@@ -200,8 +208,98 @@ class LSLSimulator:
                     return_value = self._execute_for_loop(stmt)
                 elif stmt_type == "return":
                     return self._evaluate_expression(stmt.get("value"))
+            elif isinstance(stmt, str):
+                # Handle raw string statements with proper if/else logic
+                stmt_str = stmt.strip()
+                if stmt_str and not stmt_str.startswith("//"):
+                    # Handle return statements
+                    if stmt_str == "return" or stmt_str == "return;":
+                        return None  # Early return from function
+                    
+                    # Handle if statements with proper control flow
+                    if stmt_str.startswith("if (") and stmt_str.endswith(") {"):
+                        # Extract condition
+                        condition = stmt_str[4:-3]  # Remove "if (" and ") {"
+                        condition_result = self._evaluate_expression(condition)
+                        
+                        # Find the if body and optional else body
+                        if_body = []
+                        else_body = []
+                        j = i + 1
+                        brace_count = 1
+                        
+                        # Collect if body
+                        while j < len(statements) and brace_count > 0:
+                            next_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
+                            
+                            if next_stmt == "{":
+                                brace_count += 1
+                            elif next_stmt == "}":
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    break
+                            elif next_stmt == "} else {":
+                                # Found else clause immediately after if body
+                                j += 1
+                                brace_count = 1
+                                # Collect else body
+                                while j < len(statements) and brace_count > 0:
+                                    else_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
+                                    if else_stmt == "{":
+                                        brace_count += 1
+                                    elif else_stmt == "}":
+                                        brace_count -= 1
+                                        if brace_count == 0:
+                                            break
+                                    elif else_stmt and not else_stmt.startswith("//") and else_stmt not in ["{", "}"]:
+                                        else_body.append(statements[j])
+                                    j += 1
+                                break
+                            elif next_stmt and not next_stmt.startswith("//") and next_stmt not in ["{", "}"]:
+                                if_body.append(statements[j])
+                            j += 1
+                        
+                        # Execute the appropriate body
+                        if condition_result:
+                            if if_body:
+                                return_value = self._execute_statements(if_body)
+                        else:
+                            if else_body:
+                                return_value = self._execute_statements(else_body)
+                        
+                        # Skip to after the if/else block
+                        i = j
+                        if return_value is not None:
+                            return return_value
+                        i += 1
+                        continue
+                    
+                    # Handle else statements (standalone)
+                    if stmt_str == "} else {" or stmt_str.startswith("else"):
+                        # This should be handled by if statement logic above
+                        i += 1
+                        continue
+                    
+                    # Skip braces (they're structural, not executable)
+                    if stmt_str in ["{", "}"]:
+                        i += 1
+                        continue
+                        
+                    # Handle regular statements
+                    if stmt_str.endswith(";"):
+                        stmt_str = stmt_str[:-1]
+                    
+                    # Create structured statement
+                    structured_stmt = {
+                        "type": "simple",
+                        "statement": stmt_str
+                    }
+                    return_value = self._execute_simple_statement(structured_stmt)
+            
             if return_value is not None:
                 return return_value
+                
+            i += 1
         return None
 
     def _execute_simple_statement(self, stmt):
@@ -232,6 +330,64 @@ class LSLSimulator:
             return self._execute_statements(if_node["else_body"])
         return None
 
+    def _find_variable_scope(self, var_name):
+        """Find which scope contains a variable, returning the scope or None"""
+        current = self.call_stack.get_current_scope()
+        while current:
+            if current.get(var_name) is not None:
+                return current
+            current = getattr(current, 'parent', None)
+        return None
+
+    def _execute_assignment_statement(self, stmt):
+        """Execute assignment statement with operators like =, +=, -=, etc."""
+        lvalue = stmt["lvalue"]
+        operator = stmt["operator"]
+        expression_text = stmt["expression"]
+        
+        # Evaluate the right-hand side expression
+        new_value = self._evaluate_expression(expression_text)
+        
+        # Find the correct scope for assignment - prefer existing variable locations
+        target_scope = self._find_variable_scope(lvalue)
+        if target_scope is None:
+            # Variable doesn't exist, create it in current scope
+            target_scope = self.call_stack.get_current_scope()
+        
+        if operator == "=":
+            # Simple assignment
+            target_scope.set(lvalue, new_value)
+        elif operator == "+=":
+            # Addition assignment
+            current_value = target_scope.get(lvalue) or ""
+            if isinstance(current_value, str) and isinstance(new_value, str):
+                # String concatenation
+                result = current_value + new_value
+            else:
+                # Numeric addition
+                current_num = float(current_value) if current_value else 0.0
+                new_num = float(new_value) if new_value else 0.0
+                result = current_num + new_num
+            target_scope.set(lvalue, result)
+        elif operator == "-=":
+            current_value = target_scope.get(lvalue) or 0
+            result = float(current_value) - float(new_value)
+            target_scope.set(lvalue, result)
+        elif operator == "*=":
+            current_value = target_scope.get(lvalue) or 0
+            result = float(current_value) * float(new_value)
+            target_scope.set(lvalue, result)
+        elif operator == "/=":
+            current_value = target_scope.get(lvalue) or 0
+            result = float(current_value) / float(new_value) if new_value != 0 else 0
+            target_scope.set(lvalue, result)
+        elif operator == "%=":
+            current_value = target_scope.get(lvalue) or 0
+            result = float(current_value) % float(new_value) if new_value != 0 else 0
+            target_scope.set(lvalue, result)
+        
+        return None
+
     def _execute_while_loop(self, while_node):
         while self._evaluate_expression(while_node["condition"]):
             result = self._execute_statements(while_node["body"])
@@ -243,19 +399,32 @@ class LSLSimulator:
         # Execute initialization
         if for_node.get("init"):
             init_stmt = for_node["init"]
-            # Check if it's a declaration (like "integer i = 1")
-            decl_match = re.match(r"\s*(string|integer|key|float|vector|list|rotation)\s+(\w+)\s*=\s*(.*)", init_stmt, re.DOTALL)
-            if decl_match:
-                var_type, var_name, var_val = decl_match.groups()
-                self._execute_simple_statement({
-                    "type": "declaration",
-                    "lsl_type": var_type,
-                    "name": var_name,
-                    "value": var_val.strip() if var_val else None
-                })
+            
+            # Handle ANTLR4 structured format (dict) vs old string format
+            if isinstance(init_stmt, dict):
+                # New ANTLR4 format: {"type": "assignment", "lvalue": "i", "operator": "=", "expression": "0"}
+                if init_stmt.get("type") == "assignment":
+                    self._execute_assignment_statement(init_stmt)
+                elif init_stmt.get("type") == "declaration":
+                    self._execute_simple_statement(init_stmt)
+                else:
+                    # Generic statement execution
+                    self._execute_statements([init_stmt])
             else:
-                # It's a simple assignment
-                self._execute_simple_statement({"type": "simple", "statement": init_stmt})
+                # Old string format handling
+                # Check if it's a declaration (like "integer i = 1")
+                decl_match = re.match(r"\s*(string|integer|key|float|vector|list|rotation)\s+(\w+)\s*=\s*(.*)", init_stmt, re.DOTALL)
+                if decl_match:
+                    var_type, var_name, var_val = decl_match.groups()
+                    self._execute_simple_statement({
+                        "type": "declaration",
+                        "lsl_type": var_type,
+                        "name": var_name,
+                        "value": var_val.strip() if var_val else None
+                    })
+                else:
+                    # It's a simple assignment
+                    self._execute_simple_statement({"type": "simple", "statement": init_stmt})
         
         # Execute loop
         while self._evaluate_expression(for_node["condition"]):
@@ -277,11 +446,19 @@ class LSLSimulator:
         
         # Set function arguments
         arg_names = func_def["args"]
-        for i, arg_name_str in enumerate(arg_names):
-            if arg_name_str.strip():  # Only process non-empty argument strings
-                arg_name = arg_name_str.split()[-1]  # Get the variable name after the type
-                if i < len(args):
-                    new_frame.set(arg_name, args[i])
+        for i, arg_def in enumerate(arg_names):
+            # Handle both old string format and new ANTLR4 dict format
+            if isinstance(arg_def, dict) and "name" in arg_def:
+                # New ANTLR4 format: {"type": "string", "name": "command"}
+                arg_name = arg_def["name"]
+            elif isinstance(arg_def, str) and arg_def.strip():
+                # Old format: "string command"
+                arg_name = arg_def.split()[-1]  # Get the variable name after the type
+            else:
+                continue
+            
+            if i < len(args):
+                new_frame.set(arg_name, args[i])
         
         # Execute function body
         self.call_stack.push(new_frame)
@@ -292,12 +469,16 @@ class LSLSimulator:
 
     def run(self):
         # Thread-safe event queue operations
+        print("[SIMULATOR] 🚀 run() method called - Queueing state_entry event")
         self.event_queue.put(("state_entry", []))
+        print("[SIMULATOR] ✅ state_entry event queued")
         
+        print("[SIMULATOR] 🔄 Entering main event loop")
         while self._is_running:
             try:
                 # Non-blocking get with timeout
                 event_name, args = self.event_queue.get(timeout=0.1)
+                print(f"[SIMULATOR] 📨 Processing event: {event_name}")
                 self.trigger_event(event_name, *args)
                 self.event_queue.task_done()
             except:
@@ -314,6 +495,10 @@ class LSLSimulator:
             print(f"[HTTP]    Status: {status}")
             print(f"[HTTP]    Current HTTP Request: {current_http}")
             print(f"[HTTP]    Match: {'✅ YES' if request_id == current_http else '❌ NO'}")
+        elif event_name == "dataserver":
+            print(f"[DATASERVER] 📨 EVENT TRIGGERED")
+            print(f"[DATASERVER]    Query ID: {args[0] if args else 'none'}")
+            print(f"[DATASERVER]    Data: {args[1] if len(args) > 1 else 'none'}")
         print(f"[EVENT DEBUG]: Triggering event '{event_name}' with args: {len(args)} args")
         state_events = self.states.get(self.current_state, {})
         event_handler = state_events.get(event_name)
@@ -324,17 +509,35 @@ class LSLSimulator:
             
             # Map event arguments to parameter names (same pattern as _call_user_function)
             event_args = event_handler.get("args", "")
+            if event_name == "dataserver":
+                print(f"[DATASERVER] Event args: {event_args}")
+                print(f"[DATASERVER] Received args: {args}")
             if event_args and args:
-                arg_names = [arg.strip() for arg in event_args.split(",")]
-                for i, arg_name_str in enumerate(arg_names):
-                    if i < len(args):
-                        # Extract variable name from "type name" format
-                        arg_name = arg_name_str.split()[-1]
-                        event_frame.set(arg_name, args[i])
+                if isinstance(event_args, list):
+                    # New format: list of parameter objects
+                    for i, arg_obj in enumerate(event_args):
+                        if i < len(args) and isinstance(arg_obj, dict):
+                            arg_name = arg_obj.get("name", f"arg_{i}")
+                            event_frame.set(arg_name, args[i])
+                            if event_name == "dataserver":
+                                print(f"[DATASERVER] Set {arg_name} = {args[i]}")
+                else:
+                    # Old format: comma-separated string
+                    arg_names = [arg.strip() for arg in event_args.split(",")]
+                    for i, arg_name_str in enumerate(arg_names):
+                        if i < len(args):
+                            # Extract variable name from "type name" format
+                            arg_name = arg_name_str.split()[-1]
+                            event_frame.set(arg_name, args[i])
+                            if event_name == "dataserver":
+                                print(f"[DATASERVER] Set {arg_name} = {args[i]}")
             
             self.call_stack.push(event_frame)
             try:
-                self._execute_statements(event_handler.get("body", []))
+                body_statements = event_handler.get("body", [])
+                if event_name == "dataserver":
+                    print(f"[DATASERVER] Executing handler with {len(body_statements)} statements")
+                self._execute_statements(body_statements)
             finally:
                 self.call_stack.pop()
 
@@ -362,15 +565,20 @@ class LSLSimulator:
             self.avatar_counter += 1
             avatar_key = f"00000000-0000-0000-0000-{self.avatar_counter:012d}"
         
-        # Set the current avatar so the NPC knows who to talk to
-        self.global_scope.set("current_avatar", avatar_key)
+        # Store detected avatar data for llDetectedKey/llDetectedDist to access
+        self.detected_avatars = [{
+            "key": avatar_key,
+            "name": avatar_name,
+            "distance": 2.5  # Within conversation range
+        }]
+        
+        # Set sensed avatar data for say_on_channel to use
+        self.sensed_avatar_name = avatar_name
+        self.sensed_avatar_key = avatar_key
+        print(f"[AVATAR_SENSE]: Set sensed avatar: {avatar_name} (key: {avatar_key})")
         
         # Simulate the sensor detection by calling the sensor event
         self.event_queue.put(("sensor", [1]))  # 1 avatar detected
-        
-        # Store avatar info for the sensor event to use
-        self.sensed_avatar_name = avatar_name
-        self.sensed_avatar_key = avatar_key
         
         print(f"[AVATAR_SENSE]: Sensor event queued for {avatar_name} (key: {avatar_key})")
 
@@ -429,6 +637,24 @@ class LSLSimulator:
     def api_llList2String(self, lst, index):
         if isinstance(lst, list) and 0 <= index < len(lst):
             return str(lst[index])
+        return ""
+    
+    def api_llDetectedKey(self, index):
+        """Return the key of the detected avatar at the given index"""
+        if 0 <= index < len(self.detected_avatars):
+            return self.detected_avatars[index]["key"]
+        return "00000000-0000-0000-0000-000000000000"  # NULL_KEY
+    
+    def api_llDetectedDist(self, index):
+        """Return the distance to the detected avatar at the given index"""
+        if 0 <= index < len(self.detected_avatars):
+            return self.detected_avatars[index]["distance"]
+        return 0.0
+    
+    def api_llDetectedName(self, index):
+        """Return the name of the detected avatar at the given index"""
+        if 0 <= index < len(self.detected_avatars):
+            return self.detected_avatars[index]["name"]
         return ""
     
     def api_llListFindList(self, lst, sub):
@@ -654,7 +880,20 @@ class LSLSimulator:
             
             # Make the request synchronously for now
             if method.upper() == "POST":
-                response = requests.post(url, data=body, headers=headers, timeout=5)
+                if headers.get("Content-Type") == "application/json":
+                    # Parse JSON string if it's a string, otherwise send as JSON object
+                    if isinstance(body, str):
+                        try:
+                            import json
+                            json_body = json.loads(body)
+                            response = requests.post(url, json=json_body, headers=headers, timeout=5)
+                        except json.JSONDecodeError:
+                            # If it's not valid JSON, send as raw data
+                            response = requests.post(url, data=body, headers=headers, timeout=5)
+                    else:
+                        response = requests.post(url, json=body, headers=headers, timeout=5)
+                else:
+                    response = requests.post(url, data=body, headers=headers, timeout=5)
             else:
                 response = requests.get(url, headers=headers, timeout=5)
             
@@ -777,6 +1016,7 @@ class LSLSimulator:
     # Communication Functions
     def api_llListen(self, channel, name, key, message):
         """Listen on channel"""
+        print(f"🚨 [DEBUG] api_llListen CALLED: channel={channel}, name='{name}', key='{key}', message='{message}'")
         # Thread-safe counter increment
         with self.counter_lock:
             handle = f"listen-handle-{self.listener_handle_counter}"
@@ -794,8 +1034,11 @@ class LSLSimulator:
         # Thread-safe list append
         with self.listeners_lock:
             self.active_listeners.append(listener)
+            total_listeners = len(self.active_listeners)
         
-        print(f"[LISTEN]: Listening on channel {channel} for '{message}' from {name} (handle: {handle})")
+        print(f"[LISTEN]: ✅ Created listener on channel {channel} for '{message}' from {name} (key: {key})")
+        print(f"[LISTEN]: Handle: {handle}, Total active listeners: {total_listeners}")
+        print(f"[LISTEN]: 🔄 Returning handle: {handle}")
         return handle
     
     def api_llRegionSay(self, channel, message):
@@ -822,11 +1065,18 @@ class LSLSimulator:
         with self.listeners_lock:
             listeners_copy = self.active_listeners.copy()
         
+        print(f"[LISTEN_DEBUG]: Found {len(listeners_copy)} active listeners")
+        for i, listener in enumerate(listeners_copy):
+            print(f"[LISTEN_DEBUG]: Listener {i}: channel={listener['channel']}, active={listener['active']}, handle={listener['handle']}")
+        
         for listener in listeners_copy:
             if listener['active'] and self._listener_matches(listener, channel, message, speaker_name, speaker_key):
                 # Queue a listen event
                 self.event_queue.put(("listen", [channel, speaker_name, speaker_key, message]))
                 print(f"[LISTEN_TRIGGER]: Triggering listen event for handle {listener['handle']}")
+            else:
+                match_result = self._listener_matches(listener, channel, message, speaker_name, speaker_key)
+                print(f"[LISTEN_DEBUG]: Listener {listener['handle']} no match: active={listener['active']}, match={match_result}")
 
     def _listener_matches(self, listener, channel, message, speaker_name, speaker_key):
         """Check if a listener matches the given message"""
@@ -901,16 +1151,6 @@ class LSLSimulator:
         print("[SENSOR]: Sensor removed")
         return None
     
-    def api_llDetectedKey(self, index):
-        """Get detected object key"""
-        # If we have a sensed avatar, return its key
-        if hasattr(self, 'sensed_avatar_key') and index == 0:
-            return self.sensed_avatar_key
-        return "detected-uuid-" + str(index)
-    
-    def api_llDetectedDist(self, index):
-        """Get detected object distance"""
-        return 2.5 + index * 0.5  # Simulated distance
     
     # JSON Functions
     def api_llJsonGetValue(self, json_str, path):

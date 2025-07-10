@@ -18,7 +18,7 @@ key npc = NULL_KEY; // The key of the spawned NPC avatar.
 key current_avatar = NULL_KEY; // The key of the avatar the NPC is currently interacting with.
 string npc_profile_data = ""; // Stores the content of the profile notecard.
 string conversation_state = ""; // Tracks the current point in the conversation (e.g., "greeting").
-integer sensing_active = FALSE; // Flag to enable or disable the avatar sensor.
+integer sensing_active = TRUE; // Flag to enable or disable the avatar sensor.
 integer is_registered = FALSE; // Flag to indicate if the NPC has successfully registered with the Nexus server.
 integer notecard_read_complete = FALSE;
 integer notecard_line = 0; // Counter for reading the profile notecard line by line.
@@ -44,15 +44,47 @@ vector COLOR_STANDBY = <0.8,0.8,0.8>; // Gray - Standby (on avatar)
 
 default {
     state_entry() {
+        llSay(0, "🚀 [DEBUG] state_entry STARTED!");
         // Initialize the visual appearance of the "corona" object.
         setup_corona_visual();
 
-        // Start the NPC initialization process.
-        llSetText("🤖 NPC Mode - Loading...", COLOR_LOADING, 1.0);
-        start_npc_initialization();
+        // Set up listeners FIRST before starting async operations
+        llSay(0, "🔧 [DEBUG] About to call llListen for private channel " + (string)CHANNEL);
+        string handle1 = llListen(CHANNEL, "", NULL_KEY, "");
+        llSay(0, "🔧 [DEBUG] Private channel llListen completed, handle=" + handle1);
+        
+        // Listen for public chat on channel 0 for general commands and conversation
+        llSay(0, "🔧 [DEBUG] About to call llListen for public channel 0");
+        string handle2 = llListen(0, "", NULL_KEY, "");
+        llSay(0, "🔧 [DEBUG] Public channel llListen completed, handle=" + handle2);
+        llSay(0, "👂 [LISTENER] Set up general public channel listening");
+        
+        llSay(0, "🏁 [DEBUG] state_entry LISTENERS SETUP COMPLETED!");
 
-        // Listen for control commands on the private channel.
-        llListen(CHANNEL, "", NULL_KEY, "");
+        // Start the NPC initialization process (this triggers many async dataserver events)
+        llSetText("🤖 NPC Mode - Loading...", COLOR_LOADING, 1.0);
+        llSay(0, "🔧 [DEBUG] About to call start_npc_initialization()");
+        
+        // Try inline initialization as a workaround
+        llSay(0, "🔧 [DEBUG] INLINE: Checking inventory type for: " + NOTECARD_NAME);
+        integer inv_type = llGetInventoryType(NOTECARD_NAME);
+        llSay(0, "🔧 [DEBUG] INLINE: Inventory type result: " + (string)inv_type + " (INVENTORY_NOTECARD=7)");
+        
+        if (inv_type == INVENTORY_NOTECARD) {
+            llSay(0, "🔧 [DEBUG] INLINE: ✅ Notecard found! Starting to read...");
+            npc_profile_data = "";
+            notecard_line = 0;
+            notecard_read_complete = FALSE;
+            llSay(0, "🔧 [DEBUG] INLINE: About to call llGetNotecardLine for: " + NOTECARD_NAME + ", line 0");
+            llGetNotecardLine(NOTECARD_NAME, 0);
+            llSay(0, "🔧 [DEBUG] INLINE: llGetNotecardLine call completed");
+        } else {
+            llSay(0, "🔧 [DEBUG] INLINE: ❌ Notecard not found!");
+            llSetText("❌ Missing " + NOTECARD_NAME, COLOR_ERROR, 1.0);
+            llSetTimerEvent(30.0);
+        }
+        
+        llSay(0, "🔧 [DEBUG] start_npc_initialization() completed - state_entry finished!");
     }
 
     // =================== NOTECARD READING ===================
@@ -128,7 +160,11 @@ default {
     // =================== SENSOR EVENTS ===================
     sensor(integer detected) {
         // This event is triggered by llSensorRepeat when avatars are detected.
-        if (!sensing_active) return;
+        llSay(0, "[SENSOR DEBUG] sensor event triggered, detected=" + (string)detected + ", sensing_active=" + (string)sensing_active);
+        if (!sensing_active) {
+            llSay(0, "[SENSOR DEBUG] ❌ sensing_active is FALSE, returning early");
+            return;
+        }
 
         // Find the closest avatar that is not the owner and not already in conversation.
         integer i;
@@ -137,19 +173,29 @@ default {
 
         for (i = 0; i < detected; i++) {
             key detected_key = llDetectedKey(i);
-            if (detected_key != current_avatar) {
+            llSay(0, "[SENSOR DEBUG] Checking avatar " + (string)i + ": key=" + (string)detected_key + ", current_avatar=" + (string)current_avatar);
+            // Allow detection if no current conversation OR if this is a different avatar
+            if (current_avatar == NULL_KEY || detected_key != current_avatar) {
                 float dist = llDetectedDist(i);
+                llSay(0, "[SENSOR DEBUG] Avatar distance: " + (string)dist);
                 if (dist < min_dist && dist <= 3.0) {
                     min_dist = dist;
                     closest_avatar = detected_key;
+                    llSay(0, "[SENSOR DEBUG] ✅ Set closest_avatar to: " + (string)closest_avatar);
                 }
+            } else {
+                llSay(0, "[SENSOR DEBUG] ❌ Skipping avatar - already in conversation");
             }
         }
 
         // If a new avatar is found, start a conversation with them.
         if (closest_avatar != NULL_KEY) {
+            llSay(0, "[SENSOR DEBUG] ✅ Found closest avatar: " + (string)closest_avatar + ", setting current_avatar");
             current_avatar = closest_avatar;
+            llSay(0, "[SENSOR DEBUG] ✅ current_avatar set to: " + (string)current_avatar);
             initiate_conversation(closest_avatar);
+        } else {
+            llSay(0, "[SENSOR DEBUG] ❌ No closest avatar found");
         }
     }
 
@@ -164,12 +210,25 @@ default {
     // =================== CHAT LISTENING ===================
     listen(integer channel, string name, key id, string user_message) {
         // This event is triggered by llListen when a chat message is heard.
-        if (channel == 0 && id == current_avatar) {
-            // An avatar in conversation has spoken. Send their message to the Nexus server.
-            send_talk_request(id, user_message);
-        } else if (channel == CHANNEL) {
-            // A control command was received on the private channel.
-            handle_control_command(user_message);
+        llSay(0, "[LISTEN DEBUG] Channel=" + (string)channel + ", Name='" + name + "', ID=" + (string)id + ", Message='" + user_message + "'");
+        llSay(0, "[LISTEN DEBUG] current_avatar=" + (string)current_avatar + ", Match=" + (string)(id == current_avatar));
+        
+        if (channel == 0) {
+            // Check if this is a control command (starts with /)
+            if (llGetSubString(user_message, 0, 0) == "/") {
+                // A control command was received on the public channel.
+                string command = llGetSubString(user_message, 1, -1); // Remove the "/" prefix
+                handle_control_command(command);
+            }
+            else if (id == current_avatar) {
+                // An avatar in conversation has spoken. Send their message to the Nexus server.
+                llSay(0, "[LISTEN DEBUG] ✅ MATCHED CURRENT AVATAR - Sending talk request");
+                send_talk_request(id, user_message);
+            }
+            else {
+                // Regular public chat from someone not in conversation
+                llSay(0, "[LISTEN DEBUG] ❌ ID mismatch - ignoring message");
+            }
         }
     }
 

@@ -3,16 +3,16 @@ grammar LSL;
 // ==== PARSER RULES ====
 
 // Root rule
-script: (globalDeclaration | functionDefinition)* stateDefinition+;
+script: (globalDeclaration | functionDefinition | stateDefinition)*;
 
 // Global declarations
-globalDeclaration: type IDENTIFIER ('=' expression)? ';';
+globalDeclaration: lslType IDENTIFIER ('=' expression)? ';';
 
 // Function definitions (ENHANCED)
-functionDefinition: returnType IDENTIFIER '(' parameterList? ')' '{' statement* '}';
-returnType: type | 'void';
+functionDefinition: returnType? IDENTIFIER '(' parameterList? ')' '{' statement* '}';
+returnType: lslType | 'void';
 parameterList: parameter (',' parameter)*;
-parameter: type IDENTIFIER ('=' expression)?;  // Default parameters
+parameter: lslType IDENTIFIER ('=' expression)?;  // Default parameters
 
 // State definitions
 stateDefinition: ('default' | 'state' IDENTIFIER) '{' eventHandler* '}';
@@ -46,9 +46,8 @@ statement: variableDeclaration
 // Additional control flow
 breakStatement: 'break' ';';
 continueStatement: 'continue' ';';
-doWhileStatement: 'do' statement 'while' '(' expression ')' ';';
 
-variableDeclaration: type IDENTIFIER ('=' expression)? ';';
+variableDeclaration: lslType IDENTIFIER ('=' expression)? ';';
 assignmentStatement: lvalue assignmentOperator expression ';';
 expressionStatement: expression ';';
 ifStatement: 'if' '(' expression ')' statement ('else' statement)?;
@@ -93,18 +92,11 @@ postfixOperator: '++' | '--' | '.' IDENTIFIER | '[' expression ']' | '(' argumen
 primaryExpression: IDENTIFIER
                  | literal
                  | '(' expression ')'
-                 | '(' type ')' expression  // type casting
+                 | '(' lslType ')' expression  // type casting
                  | functionCall
                  | vectorLiteral
                  | rotationLiteral
-                 | listLiteral
-                 | memberAccess
-                 | indexAccess;
-
-// Member access and indexing
-memberAccess: primaryExpression '.' IDENTIFIER;
-indexAccess: primaryExpression '[' expression ']'
-           | primaryExpression '[' expression ':' expression ']';  // slicing
+                 | listLiteral;
 
 functionCall: IDENTIFIER '(' argumentList? ')';
 argumentList: expression (',' expression)*;
@@ -114,6 +106,9 @@ literal: INTEGER
        | FLOAT
        | STRING
        | KEY
+       | TRUE
+       | FALSE
+       | NULL_KEY
        | vectorLiteral
        | rotationLiteral
        | listLiteral;
@@ -125,7 +120,7 @@ listLiteral: '[' (listElement (',' listElement)*)? ']';
 listElement: expression | listLiteral;  // Nested lists
 
 // Types
-type: 'integer' | 'float' | 'string' | 'key' | 'vector' | 'rotation' | 'list';
+lslType: 'integer' | 'float' | 'string' | 'key' | 'vector' | 'rotation' | 'list';
 
 // ==== LEXER RULES ====
 
@@ -191,8 +186,6 @@ DOT: '.';
 QUESTION: '?';
 COLON: ':';
 AT: '@';
-LANGLE: '<';
-RANGLE: '>';
 
 // Literals
 INTEGER: ('0x' | '0X') [0-9a-fA-F]+        // Hexadecimal
