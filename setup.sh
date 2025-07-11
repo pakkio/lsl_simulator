@@ -83,7 +83,7 @@ expect {
 
 # Simulate avatar saying hi
 puts "\nAUTO: Simulating john saying 'hi'..."
-send "s hi\r"
+send "s 1 hi\r"
 
 # Wait for HTTP request
 expect {
@@ -123,7 +123,7 @@ else
     echo "1. Run: poetry run python lsl.py npc.lsl"  
     echo "2. Wait for 'Type help or h for available commands'"
     echo "3. Type: sense john"
-    echo "4. Type: s hi"
+    echo "4. Type: s 1 hi"
     echo "5. Look for 'HTTP talk request triggered'"
 fi
 

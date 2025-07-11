@@ -688,27 +688,6 @@ class LSLAPIExpanded:
 
     def _register_sensor_functions(self):
         """Register sensor functions (19 functions)"""
-        def llSensor(name, id, type, range, arc):
-            print(f"Sensor: {name}, range: {range}, arc: {arc}")
-            # Simulate finding objects
-            self.sensors = [
-                {'name': 'TestObject', 'key': str(uuid.uuid4()), 'pos': (10.0, 5.0, 0.0)},
-                {'name': 'AnotherObject', 'key': str(uuid.uuid4()), 'pos': (15.0, 8.0, 2.0)}
-            ]
-        def llSensorRepeat(name, id, type, range, arc, rate):
-            print(f"Sensor repeat: {name}, rate: {rate}")
-            llSensor(name, id, type, range, arc)
-        def llSensorRemove():
-            self.sensors = []
-            print("Sensor removed")
-        def llDetectedName(number):
-            if 0 <= number < len(self.sensors):
-                return self.sensors[number]['name']
-            return ""
-        def llDetectedKey(number):
-            if 0 <= number < len(self.sensors):
-                return self.sensors[number]['key']
-            return "00000000-0000-0000-0000-000000000000"
         def llDetectedOwner(number):
             if 0 <= number < len(self.sensors):
                 return str(uuid.uuid4())  # Simulate owner
@@ -981,15 +960,6 @@ class LSLAPIExpanded:
             """Sends instant message to specific user"""
             print(f"IM to {user}: {message}")
             
-        def llListen(channel, name, id, msg):
-            """Sets up chat listener"""
-            listener_id = random.randint(1000, 9999)
-            print(f"Listening on channel {channel} (listener {listener_id})")
-            return listener_id
-            
-        def llListenRemove(handle):
-            """Removes chat listener"""
-            print(f"Removed listener {handle}")
             
         def llDetectedDist(number):
             """Returns distance to detected object"""

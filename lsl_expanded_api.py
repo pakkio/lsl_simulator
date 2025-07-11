@@ -89,7 +89,6 @@ class LSLExpandedAPI:
         
         # Additional communication functions
         self._register_function("llRegionSayTo", self.api_llRegionSayTo)
-        self._register_function("llListenControl", self.api_llListenControl)
         self._register_function("llDialog", self.api_llDialog)
         
         # Additional inventory functions
@@ -546,9 +545,6 @@ class LSLExpandedAPI:
         """Say to specific target in region"""
         print(f"[Region Say to {target} on {channel}]: {text}")
     
-    def api_llListenControl(self, handle: str, active: bool) -> None:
-        """Control listen handle"""
-        pass
     
     def api_llDialog(self, avatar: str, message: str, buttons: List[str], channel: int) -> None:
         """Show dialog to avatar"""
@@ -1022,9 +1018,3 @@ class LSLExpandedAPI:
         """Check if key is an NPC"""
         return key.startswith("npc-")
     
-    def api_llListenControl(self, handle: int, active: bool) -> None:
-        """Control a listen handle"""
-        for listener in self.simulator.active_listeners:
-            if listener.get('handle') == handle:
-                listener['active'] = active
-                break

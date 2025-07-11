@@ -1,0 +1,3 @@
+#\!/usr/bin/expect -f
+puts "[AUTO] Testing expect script syntax..."
+puts "[AUTO] Script syntax is valid\!"

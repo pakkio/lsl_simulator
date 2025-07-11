@@ -449,25 +449,6 @@ class ComprehensiveLSLAPIPart2:
         else:
             self.simulator.event_queue.append(("no_sensor", []))
     
-    def api_llSensorRepeat(self, name: str, key: str, type_filter: int, range_val: float, arc: float, rate: float) -> None:
-        """Repeating sensor."""
-        print(f"[llSensorRepeat]: Repeating scan for {name} every {rate}s")
-    
-    def api_llSensorRemove(self) -> None:
-        """Remove sensor."""
-        print("[llSensorRemove]: Sensor removed")
-    
-    def api_llDetectedName(self, index: int) -> str:
-        """Get detected object name."""
-        if hasattr(self.simulator, 'sensed_avatar_name') and index == 0:
-            return self.simulator.sensed_avatar_name
-        return f"Detected Object {index}"
-    
-    def api_llDetectedKey(self, index: int) -> str:
-        """Get detected object key."""
-        if hasattr(self.simulator, 'sensed_avatar_key') and index == 0:
-            return self.simulator.sensed_avatar_key
-        return f"detected-uuid-{index}"
     
     def api_llDetectedOwner(self, index: int) -> str:
         """Get detected object owner."""

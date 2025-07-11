@@ -153,7 +153,7 @@ class LSLSimulator:
         print("🛑 LSL Simulator stopped")
 
     def trigger_event(self, event_name, args=None):
-        """Trigger an event in the current state."""
+        """Trigger an event in the current state with proper parameter mapping."""
         if args is None:
             args = []
         
@@ -163,7 +163,39 @@ class LSLSimulator:
         if event_handler:
             print(f"📨 Triggering event: {event_name}")
             try:
-                self._execute_statements(event_handler.get("body", []))
+                # Create a new frame for event execution
+                event_frame = Frame(parent_scope=self.global_scope)
+                
+                # Map event arguments to parameters for specific events
+                if event_name == "listen" and len(args) >= 4:
+                    # listen(integer channel, string name, key id, string message)
+                    event_frame.set("channel", args[0])
+                    event_frame.set("name", args[1])
+                    event_frame.set("id", args[2])
+                    event_frame.set("message", args[3])
+                elif event_name == "dataserver" and len(args) >= 2:
+                    # dataserver(key query_id, string data)
+                    event_frame.set("query_id", args[0])
+                    event_frame.set("data", args[1])
+                elif event_name == "sensor" and len(args) >= 1:
+                    # sensor(integer detected)
+                    event_frame.set("detected", args[0])
+                elif event_name == "http_response" and len(args) >= 4:
+                    # http_response(key request_id, integer status, list metadata, string body)
+                    event_frame.set("request_id", args[0])
+                    event_frame.set("status", args[1])
+                    event_frame.set("metadata", args[2] if len(args) > 2 else [])
+                    event_frame.set("body", args[3] if len(args) > 3 else "")
+                
+                # Push the event frame onto the call stack
+                self.call_stack.push(event_frame)
+                
+                try:
+                    self._execute_statements(event_handler.get("body", []))
+                finally:
+                    # Always pop the frame
+                    self.call_stack.pop()
+                    
             except Exception as e:
                 print(f"⚠️  Error in {event_name} event: {e}")
         else:
@@ -418,22 +450,6 @@ class LSLSimulator:
         else:
             return 0.0
 
-    def simulate_avatar_sense(self, avatar_name):
-        """Simulate sensing an avatar."""
-        self.avatar_counter += 1
-        avatar_key = f"avatar-{self.avatar_counter}-{int(time.time())}"
-        
-        self.sensed_avatar_name = avatar_name
-        self.sensed_avatar_key = avatar_key
-        
-        # Update global variables for compatibility
-        self.global_scope.set("current_avatar", avatar_name)
-        self.global_scope.set("current_avatar_key", avatar_key)
-        
-        # Queue sensor event
-        self.event_queue.append(("sensor", [1]))  # 1 = number detected
-        
-        print(f"👤 Avatar sensed: {avatar_name} ({avatar_key})")
 
     def stop(self):
         """Stop the simulator."""
@@ -487,7 +503,22 @@ class LSLSimulator:
         
         print(f"[CHANNEL {channel}] {speaker_name}: {message}")
         
+        # Trigger all matching listeners (not just the first one)
         for listener in self.active_listeners:
             if listener['active'] and listener['channel'] == channel:
-                self.event_queue.append(("listen", [channel, speaker_name, speaker_key, message]))
-                break
+                # Add more sophisticated matching like the main simulator
+                name_filter = listener.get('name', '')
+                key_filter = listener.get('key', '')
+                message_filter = listener.get('message', '')
+                
+                # Simple matching logic (can be enhanced)
+                matches = True
+                if name_filter and name_filter != speaker_name:
+                    matches = False
+                if key_filter and key_filter != '00000000-0000-0000-0000-000000000000' and key_filter != speaker_key:
+                    matches = False
+                if message_filter and message_filter not in message:
+                    matches = False
+                
+                if matches:
+                    self.event_queue.append(("listen", [channel, speaker_name, speaker_key, message]))

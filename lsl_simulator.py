@@ -499,6 +499,9 @@ class LSLSimulator:
             print(f"[DATASERVER] 📨 EVENT TRIGGERED")
             print(f"[DATASERVER]    Query ID: {args[0] if args else 'none'}")
             print(f"[DATASERVER]    Data: {args[1] if len(args) > 1 else 'none'}")
+        elif event_name == "sensor":
+            print(f"[SENSOR_DEBUG] 📨 EVENT TRIGGERED")
+            print(f"[SENSOR_DEBUG]    Detected: {args[0] if args else 'none'}")
         print(f"[EVENT DEBUG]: Triggering event '{event_name}' with args: {len(args)} args")
         state_events = self.states.get(self.current_state, {})
         event_handler = state_events.get(event_name)
@@ -512,6 +515,9 @@ class LSLSimulator:
             if event_name == "dataserver":
                 print(f"[DATASERVER] Event args: {event_args}")
                 print(f"[DATASERVER] Received args: {args}")
+            elif event_name == "sensor":
+                print(f"[SENSOR_DEBUG] Event args: {event_args}")
+                print(f"[SENSOR_DEBUG] Received args: {args}")
             if event_args and args:
                 if isinstance(event_args, list):
                     # New format: list of parameter objects
@@ -521,6 +527,8 @@ class LSLSimulator:
                             event_frame.set(arg_name, args[i])
                             if event_name == "dataserver":
                                 print(f"[DATASERVER] Set {arg_name} = {args[i]}")
+                            elif event_name == "sensor":
+                                print(f"[SENSOR_DEBUG] Set {arg_name} = {args[i]}")
                 else:
                     # Old format: comma-separated string
                     arg_names = [arg.strip() for arg in event_args.split(",")]
@@ -531,12 +539,16 @@ class LSLSimulator:
                             event_frame.set(arg_name, args[i])
                             if event_name == "dataserver":
                                 print(f"[DATASERVER] Set {arg_name} = {args[i]}")
+                            elif event_name == "sensor":
+                                print(f"[SENSOR_DEBUG] Set {arg_name} = {args[i]}")
             
             self.call_stack.push(event_frame)
             try:
                 body_statements = event_handler.get("body", [])
                 if event_name == "dataserver":
                     print(f"[DATASERVER] Executing handler with {len(body_statements)} statements")
+                elif event_name == "sensor":
+                    print(f"[SENSOR_DEBUG] Executing handler with {len(body_statements)} statements")
                 self._execute_statements(body_statements)
             finally:
                 self.call_stack.pop()

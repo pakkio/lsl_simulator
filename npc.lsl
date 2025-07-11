@@ -6,7 +6,7 @@
 // These settings define the core behavior of the NPC agent.
 string NEXUS_BASE_URL = "http://localhost:5000/npc"; // URL of the AI backend.
 string NOTECARD_NAME = "npc_profile"; // Name of the notecard containing the NPC's personality.
-integer CHANNEL = -98765; // Private channel for control commands.
+integer CHANNEL = 1; // Private channel for control commands.
 integer HTTP_TIMEOUT = 30; // Seconds before an HTTP request times out.
 integer SENSOR_RANGE = 8; // Meters to scan for nearby avatars.
 float SENSOR_REPEAT = 2.0; // Seconds between sensor scans.

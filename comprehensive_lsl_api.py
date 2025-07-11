@@ -783,10 +783,16 @@ class ComprehensiveLSLAPI:
         print(f"[llInstantMessage to {user}]: {message}")
     
     def api_llListen(self, channel: int, name: str, key: str, message: str) -> str:
-        """Listen on channel."""
+        """Listen on channel with proper listener management."""
+        # Initialize listener counter if it doesn't exist
+        if not hasattr(self.simulator, 'listener_handle_counter'):
+            self.simulator.listener_handle_counter = 1
+        
+        # Generate handle
         handle = f"listen-handle-{self.simulator.listener_handle_counter}"
         self.simulator.listener_handle_counter += 1
         
+        # Create listener object
         listener = {
             'handle': handle,
             'channel': channel,
@@ -796,22 +802,52 @@ class ComprehensiveLSLAPI:
             'active': True
         }
         
-        self.simulator.active_listeners.append(listener)
+        # Add to active listeners with thread safety if available
+        if hasattr(self.simulator, 'listeners_lock'):
+            with self.simulator.listeners_lock:
+                self.simulator.active_listeners.append(listener)
+        else:
+            # Simplified simulator without locks
+            if not hasattr(self.simulator, 'active_listeners'):
+                self.simulator.active_listeners = []
+            self.simulator.active_listeners.append(listener)
+        
         print(f"[llListen]: Listening on channel {channel}")
         return handle
     
     def api_llListenControl(self, handle: str, active: int) -> None:
-        """Control listener active state."""
-        for listener in self.simulator.active_listeners:
-            if listener['handle'] == handle:
-                listener['active'] = bool(active)
-                print(f"[llListenControl]: Listener {handle} {'enabled' if active else 'disabled'}")
-                return
+        """Control listener active state with proper synchronization."""
+        if hasattr(self.simulator, 'listeners_lock'):
+            with self.simulator.listeners_lock:
+                for listener in self.simulator.active_listeners:
+                    if listener['handle'] == handle:
+                        listener['active'] = bool(active)
+                        print(f"[llListenControl]: Listener {handle} {'enabled' if active else 'disabled'}")
+                        return
+        else:
+            # Simplified simulator without locks
+            if hasattr(self.simulator, 'active_listeners'):
+                for listener in self.simulator.active_listeners:
+                    if listener['handle'] == handle:
+                        listener['active'] = bool(active)
+                        print(f"[llListenControl]: Listener {handle} {'enabled' if active else 'disabled'}")
+                        return
+        
+        print(f"[llListenControl]: Listener {handle} not found")
     
     def api_llListenRemove(self, handle: str) -> None:
-        """Remove listener."""
-        self.simulator.active_listeners = [l for l in self.simulator.active_listeners if l['handle'] != handle]
-        print(f"[llListenRemove]: Removed listener {handle}")
+        """Remove listener with proper synchronization."""
+        if hasattr(self.simulator, 'listeners_lock'):
+            with self.simulator.listeners_lock:
+                self.simulator.active_listeners = [l for l in self.simulator.active_listeners if l['handle'] != handle]
+                print(f"[llListenRemove]: Removed listener {handle}")
+        else:
+            # Simplified simulator without locks
+            if hasattr(self.simulator, 'active_listeners'):
+                self.simulator.active_listeners = [l for l in self.simulator.active_listeners if l['handle'] != handle]
+                print(f"[llListenRemove]: Removed listener {handle}")
+            else:
+                print(f"[llListenRemove]: No active listeners to remove")
     
     def api_llDialog(self, avatar: str, message: str, buttons: List[str], channel: int) -> None:
         """Show dialog to avatar."""
@@ -886,5 +922,95 @@ class ComprehensiveLSLAPI:
                     return "invalid"
         except:
             return "invalid"
+    
+    # =============================================================================
+    # SENSOR FUNCTIONS (10 functions)
+    # =============================================================================
+    
+    def api_llSensorRepeat(self, name: str, key: str, type_filter: int, range_val: float, arc: float, rate: float) -> None:
+        """Delegate sensor repeat to main simulator."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            # Use main simulator's implementation
+            return self.simulator.api_llSensorRepeat(name, key, type_filter, range_val, arc, rate)
+        else:
+            # Fallback implementation
+            print(f"[llSensorRepeat]: Repeating scan for {name} every {rate}s in {range_val}m range")
+    
+    def api_llSensorRemove(self) -> None:
+        """Delegate sensor remove to main simulator."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            # Use main simulator's implementation
+            return self.simulator.api_llSensorRemove()
+        else:
+            # Fallback implementation
+            print("[llSensorRemove]: Sensor removed")
+    
+    def api_llDetectedName(self, index: int) -> str:
+        """Delegate detected name to main simulator."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            # Use main simulator's implementation
+            return self.simulator.api_llDetectedName(index)
+        else:
+            # Fallback implementation
+            if hasattr(self.simulator, 'sensed_avatar_name') and index == 0:
+                return self.simulator.sensed_avatar_name
+            return f"Detected Object {index}"
+    
+    def api_llDetectedKey(self, index: int) -> str:
+        """Delegate detected key to main simulator."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            # Use main simulator's implementation
+            return self.simulator.api_llDetectedKey(index)
+        else:
+            # Fallback implementation
+            if hasattr(self.simulator, 'sensed_avatar_key') and index == 0:
+                return self.simulator.sensed_avatar_key
+            return f"detected-uuid-{index}"
+    
+    def api_llDetectedDist(self, index: int) -> float:
+        """Get distance to detected object."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            # Use main simulator's implementation if available
+            if hasattr(self.simulator, 'api_llDetectedDist'):
+                return self.simulator.api_llDetectedDist(index)
+            # Fallback using detected_avatars
+            if 0 <= index < len(self.simulator.detected_avatars):
+                return self.simulator.detected_avatars[index].get("distance", 2.5)
+        return 2.5  # Default conversation distance
+    
+    def api_llDetectedPos(self, index: int) -> List[float]:
+        """Get position of detected object."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            if hasattr(self.simulator, 'api_llDetectedPos'):
+                return self.simulator.api_llDetectedPos(index)
+        return [0.0, 0.0, 0.0]
+    
+    def api_llDetectedVel(self, index: int) -> List[float]:
+        """Get velocity of detected object."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            if hasattr(self.simulator, 'api_llDetectedVel'):
+                return self.simulator.api_llDetectedVel(index)
+        return [0.0, 0.0, 0.0]
+    
+    def api_llDetectedRot(self, index: int) -> List[float]:
+        """Get rotation of detected object."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            if hasattr(self.simulator, 'api_llDetectedRot'):
+                return self.simulator.api_llDetectedRot(index)
+        return [0.0, 0.0, 0.0, 1.0]
+    
+    def api_llDetectedType(self, index: int) -> int:
+        """Get type of detected object."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            if hasattr(self.simulator, 'api_llDetectedType'):
+                return self.simulator.api_llDetectedType(index)
+        return 1  # AGENT
+    
+    def api_llDetectedOwner(self, index: int) -> str:
+        """Get owner of detected object."""
+        if hasattr(self.simulator, 'detected_avatars'):
+            if hasattr(self.simulator, 'api_llDetectedOwner'):
+                return self.simulator.api_llDetectedOwner(index)
+        return "00000000-0000-0000-0000-000000000000"
     
     # Continue in next part due to length limit...
