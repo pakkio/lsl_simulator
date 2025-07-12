@@ -260,24 +260,86 @@ class LSLSimulator:
                             elif next_stmt == "}":
                                 brace_count -= 1
                                 if brace_count == 0:
-                                    break
-                            elif next_stmt == "} else {":
-                                # Found else clause immediately after if body
-                                j += 1
-                                brace_count = 1
-                                # Collect else body
-                                while j < len(statements) and brace_count > 0:
-                                    else_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
-                                    if else_stmt == "{":
-                                        brace_count += 1
-                                    elif else_stmt == "}":
-                                        brace_count -= 1
-                                        if brace_count == 0:
+                                    # Check if next statement is else or else if
+                                    if j + 1 < len(statements):
+                                        next_next_stmt = statements[j + 1].strip() if isinstance(statements[j + 1], str) else str(statements[j + 1])
+                                        
+                                        if next_next_stmt == "} else {":
+                                            # Found else clause
+                                            j += 2  # Skip the } and } else {
+                                            brace_count = 1
+                                            # Collect else body
+                                            while j < len(statements) and brace_count > 0:
+                                                else_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
+                                                if else_stmt == "{":
+                                                    brace_count += 1
+                                                elif else_stmt == "}":
+                                                    brace_count -= 1
+                                                    if brace_count == 0:
+                                                        break
+                                                elif else_stmt and not else_stmt.startswith("//") and else_stmt not in ["{", "}"]:
+                                                    else_body.append(statements[j])
+                                                j += 1
                                             break
-                                    elif else_stmt and not else_stmt.startswith("//") and else_stmt not in ["{", "}"]:
-                                        else_body.append(statements[j])
-                                    j += 1
-                                break
+                                        elif next_next_stmt.startswith("else if (") and next_next_stmt.endswith(") {"):
+                                            # Found else if clause
+                                            else_if_condition = next_next_stmt[9:-3]  # Remove "else if (" and ") {"
+                                            else_body.append({
+                                                "type": "if",
+                                                "condition": else_if_condition,
+                                                "then_body": [],
+                                                "else_body": []
+                                            })
+                                            
+                                            # Now collect the else if body and any further else clauses
+                                            j += 2  # Skip the } and else if statement
+                                            brace_count = 1
+                                            current_else_if = else_body[-1]
+                                            
+                                            while j < len(statements) and brace_count > 0:
+                                                else_if_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
+                                                if else_if_stmt == "{":
+                                                    brace_count += 1
+                                                elif else_if_stmt == "}":
+                                                    brace_count -= 1
+                                                    if brace_count == 0:
+                                                        # Check for more else if or final else
+                                                        if j + 1 < len(statements):
+                                                            after_else_if = statements[j + 1].strip() if isinstance(statements[j + 1], str) else str(statements[j + 1])
+                                                            if after_else_if.startswith("else if (") and after_else_if.endswith(") {"):
+                                                                # Chain another else if
+                                                                next_else_if_condition = after_else_if[9:-3]
+                                                                current_else_if["else_body"].append({
+                                                                    "type": "if",
+                                                                    "condition": next_else_if_condition,
+                                                                    "then_body": [],
+                                                                    "else_body": []
+                                                                })
+                                                                current_else_if = current_else_if["else_body"][-1]
+                                                                j += 2
+                                                                brace_count = 1
+                                                                continue
+                                                            elif after_else_if == "} else {":
+                                                                # Final else clause
+                                                                j += 2
+                                                                brace_count = 1
+                                                                while j < len(statements) and brace_count > 0:
+                                                                    final_else_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
+                                                                    if final_else_stmt == "{":
+                                                                        brace_count += 1
+                                                                    elif final_else_stmt == "}":
+                                                                        brace_count -= 1
+                                                                        if brace_count == 0:
+                                                                            break
+                                                                    elif final_else_stmt and not final_else_stmt.startswith("//") and final_else_stmt not in ["{", "}"]:
+                                                                        current_else_if["else_body"].append(statements[j])
+                                                                    j += 1
+                                                        break
+                                                elif else_if_stmt and not else_if_stmt.startswith("//") and else_if_stmt not in ["{", "}"]:
+                                                    current_else_if["then_body"].append(statements[j])
+                                                j += 1
+                                            break
+                                    break
                             elif next_stmt and not next_stmt.startswith("//") and next_stmt not in ["{", "}"]:
                                 if_body.append(statements[j])
                             j += 1
@@ -298,7 +360,7 @@ class LSLSimulator:
                         continue
                     
                     # Handle else statements (standalone)
-                    if stmt_str == "} else {" or stmt_str.startswith("else"):
+                    if stmt_str == "} else {" or stmt_str.startswith("else") or stmt_str.startswith("} else if ("):
                         # This should be handled by if statement logic above
                         i += 1
                         continue
@@ -498,6 +560,9 @@ class LSLSimulator:
     def _call_user_function(self, func_name, args):
         func_def = self.user_functions[func_name]
         
+        # Save current debug context before function call
+        saved_statement_info = self.next_statement_info.copy() if isinstance(self.next_statement_info, dict) else None
+        
         # Create new frame for function
         new_frame = Frame(parent_scope=self.call_stack.get_current_scope())
         
@@ -521,6 +586,10 @@ class LSLSimulator:
         self.call_stack.push(new_frame)
         return_value = self._execute_statements(func_def["body"])
         self.call_stack.pop()
+        
+        # Restore debug context after function call
+        if saved_statement_info and self.debug_mode:
+            self.next_statement_info = saved_statement_info
         
         return return_value
 
@@ -1026,16 +1095,20 @@ class LSLSimulator:
                                 self.event_queue.put(("dataserver", [request_key, content]))
                             else:
                                 print(f"[NOTECARD EOF]: Reached end of file {filename}")
-                                # Queue dataserver event with EOF
-                                self.event_queue.put(("dataserver", [request_key, "EOF"]))
+                                # Queue dataserver event with EOF constant
+                                eof_value = self.global_scope.get("EOF")
+                                print(f"[DEBUG] Sending EOF value: '{eof_value}' (type: {type(eof_value)})")
+                                self.event_queue.put(("dataserver", [request_key, eof_value]))
                     else:
                         print(f"[NOTECARD ERROR]: File {filename} not found")
                         # Queue dataserver event with EOF for missing file
-                        self.event_queue.put(("dataserver", [request_key, "EOF"]))
+                        eof_value = self.global_scope.get("EOF")
+                        self.event_queue.put(("dataserver", [request_key, eof_value]))
                 except Exception as e:
                     print(f"[NOTECARD READ ERROR]: {e}")
                     # Queue dataserver event with EOF on error
-                    self.event_queue.put(("dataserver", [request_key, "EOF"]))
+                    eof_value = self.global_scope.get("EOF")
+                    self.event_queue.put(("dataserver", [request_key, eof_value]))
             
             # Execute synchronously to ensure event is queued before returning
             read_notecard()
