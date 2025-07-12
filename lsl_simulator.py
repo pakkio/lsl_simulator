@@ -132,7 +132,7 @@ class LSLSimulator:
             items = parsed_tree.asList() if hasattr(parsed_tree, 'asList') else parsed_tree
             if isinstance(items, list) and len(items) >= 1 and isinstance(items[0], str):
                 if items[0].startswith('ll') or items[0].startswith('os'):
-                    print(f"[DEBUG] _evaluate_tree: Processing function call: {items}")
+                    print(f"\033[92m[DEBUG] _evaluate_tree: Processing function call: {items}\033[0m")
         
         # Convert pyparsing tree to expression node
         expression_node = self.tree_converter.convert(parsed_tree)
@@ -196,7 +196,7 @@ class LSLSimulator:
                 line_num = stmt_line
 
             if self.debug_mode and should_debug and (line_num in self.breakpoints or self.single_step):
-                self.breakpoints.discard(line_num)
+                # Don't remove breakpoints when hit - keep them active
                 
                 # Check if we should pause based on step mode and call depth
                 should_pause = True
@@ -387,7 +387,7 @@ class LSLSimulator:
         """Find which scope contains a variable, returning the scope or None"""
         current = self.call_stack.get_current_scope()
         while current:
-            if current.get(var_name) is not None:
+            if hasattr(current, 'locals') and var_name in current.locals:
                 return current
             current = getattr(current, 'parent', None)
         return None
@@ -412,7 +412,11 @@ class LSLSimulator:
             target_scope.set(lvalue, new_value)
         elif operator == "+=":
             # Addition assignment
-            current_value = target_scope.get(lvalue) or ""
+            if lvalue in target_scope.locals:
+                current_value = target_scope.get(lvalue)
+            else:
+                current_value = ""
+            
             if isinstance(current_value, str) and isinstance(new_value, str):
                 # String concatenation
                 result = current_value + new_value
@@ -1094,7 +1098,7 @@ class LSLSimulator:
     # Communication Functions
     def api_llListen(self, channel, name, key, message):
         """Listen on channel"""
-        print(f"🚨 [DEBUG] api_llListen CALLED: channel={channel}, name='{name}', key='{key}', message='{message}'")
+        print(f"\033[92m🚨 [DEBUG] api_llListen CALLED: channel={channel}, name='{name}', key='{key}', message='{message}'\033[0m")
         # Thread-safe counter increment
         with self.counter_lock:
             handle = f"listen-handle-{self.listener_handle_counter}"

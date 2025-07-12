@@ -108,7 +108,7 @@ default {
                 register_with_nexus();
             }
         }
-        else {
+        else if (data != EOF) {
             // Handle normal content - continue reading
             llSay(0, "[DEBUG] dataserver: Read line " + (string)notecard_line + ": " + data);
             npc_profile_data += data + "\n";
