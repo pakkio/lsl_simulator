@@ -50,7 +50,7 @@ continueStatement: 'continue' ';';
 variableDeclaration: lslType IDENTIFIER ('=' expression)? ';';
 assignmentStatement: lvalue assignmentOperator expression ';';
 expressionStatement: expression ';';
-ifStatement: 'if' '(' expression ')' statement ('else' statement)?;
+ifStatement: 'if' '(' expression ')' statement ('else' 'if' '(' expression ')' statement)* ('else' statement)?;
 whileStatement: 'while' '(' expression ')' statement;
 doWhileStatement: 'do' statement 'while' '(' expression ')' ';';
 forStatement: 'for' '(' (variableDeclaration | assignmentStatement | ';') expression? ';' expression? ')' statement;

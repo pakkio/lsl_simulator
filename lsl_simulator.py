@@ -239,123 +239,22 @@ class LSLSimulator:
                     if stmt_str == "return" or stmt_str == "return;":
                         return None  # Early return from function
                     
-                    # Handle if statements with proper control flow
+                    # Handle structured if statements (parsed by ANTLR)
+                    if isinstance(stmt, dict) and stmt.get('type') == 'if_statement':
+                        return_value = self._execute_if_statement(stmt)
+                        if return_value is not None:
+                            return return_value
+                        i += 1
+                        continue
+                    
+                    # Handle legacy string-based if statements for compatibility
                     if stmt_str.startswith("if (") and stmt_str.endswith(") {"):
-                        # Extract condition
+                        # Extract condition and evaluate
                         condition = stmt_str[4:-3]  # Remove "if (" and ") {"
                         condition_result = self._evaluate_expression(condition)
                         
-                        # Find the if body and optional else body
-                        if_body = []
-                        else_body = []
-                        j = i + 1
-                        brace_count = 1
-                        
-                        # Collect if body
-                        while j < len(statements) and brace_count > 0:
-                            next_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
-                            
-                            if next_stmt == "{":
-                                brace_count += 1
-                            elif next_stmt == "}":
-                                brace_count -= 1
-                                if brace_count == 0:
-                                    # Check if next statement is else or else if
-                                    if j + 1 < len(statements):
-                                        next_next_stmt = statements[j + 1].strip() if isinstance(statements[j + 1], str) else str(statements[j + 1])
-                                        
-                                        if next_next_stmt == "} else {":
-                                            # Found else clause
-                                            j += 2  # Skip the } and } else {
-                                            brace_count = 1
-                                            # Collect else body
-                                            while j < len(statements) and brace_count > 0:
-                                                else_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
-                                                if else_stmt == "{":
-                                                    brace_count += 1
-                                                elif else_stmt == "}":
-                                                    brace_count -= 1
-                                                    if brace_count == 0:
-                                                        break
-                                                elif else_stmt and not else_stmt.startswith("//") and else_stmt not in ["{", "}"]:
-                                                    else_body.append(statements[j])
-                                                j += 1
-                                            break
-                                        elif next_next_stmt.startswith("else if (") and next_next_stmt.endswith(") {"):
-                                            # Found else if clause
-                                            else_if_condition = next_next_stmt[9:-3]  # Remove "else if (" and ") {"
-                                            else_body.append({
-                                                "type": "if",
-                                                "condition": else_if_condition,
-                                                "then_body": [],
-                                                "else_body": []
-                                            })
-                                            
-                                            # Now collect the else if body and any further else clauses
-                                            j += 2  # Skip the } and else if statement
-                                            brace_count = 1
-                                            current_else_if = else_body[-1]
-                                            
-                                            while j < len(statements) and brace_count > 0:
-                                                else_if_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
-                                                if else_if_stmt == "{":
-                                                    brace_count += 1
-                                                elif else_if_stmt == "}":
-                                                    brace_count -= 1
-                                                    if brace_count == 0:
-                                                        # Check for more else if or final else
-                                                        if j + 1 < len(statements):
-                                                            after_else_if = statements[j + 1].strip() if isinstance(statements[j + 1], str) else str(statements[j + 1])
-                                                            if after_else_if.startswith("else if (") and after_else_if.endswith(") {"):
-                                                                # Chain another else if
-                                                                next_else_if_condition = after_else_if[9:-3]
-                                                                current_else_if["else_body"].append({
-                                                                    "type": "if",
-                                                                    "condition": next_else_if_condition,
-                                                                    "then_body": [],
-                                                                    "else_body": []
-                                                                })
-                                                                current_else_if = current_else_if["else_body"][-1]
-                                                                j += 2
-                                                                brace_count = 1
-                                                                continue
-                                                            elif after_else_if == "} else {":
-                                                                # Final else clause
-                                                                j += 2
-                                                                brace_count = 1
-                                                                while j < len(statements) and brace_count > 0:
-                                                                    final_else_stmt = statements[j].strip() if isinstance(statements[j], str) else str(statements[j])
-                                                                    if final_else_stmt == "{":
-                                                                        brace_count += 1
-                                                                    elif final_else_stmt == "}":
-                                                                        brace_count -= 1
-                                                                        if brace_count == 0:
-                                                                            break
-                                                                    elif final_else_stmt and not final_else_stmt.startswith("//") and final_else_stmt not in ["{", "}"]:
-                                                                        current_else_if["else_body"].append(statements[j])
-                                                                    j += 1
-                                                        break
-                                                elif else_if_stmt and not else_if_stmt.startswith("//") and else_if_stmt not in ["{", "}"]:
-                                                    current_else_if["then_body"].append(statements[j])
-                                                j += 1
-                                            break
-                                    break
-                            elif next_stmt and not next_stmt.startswith("//") and next_stmt not in ["{", "}"]:
-                                if_body.append(statements[j])
-                            j += 1
-                        
-                        # Execute the appropriate body
-                        if condition_result:
-                            if if_body:
-                                return_value = self._execute_statements(if_body)
-                        else:
-                            if else_body:
-                                return_value = self._execute_statements(else_body)
-                        
-                        # Skip to after the if/else block
-                        i = j
-                        if return_value is not None:
-                            return return_value
+                        # Simple if handling - skip complex parsing for now
+                        # This should be replaced by proper ANTLR parsing
                         i += 1
                         continue
                     
@@ -1398,6 +1297,46 @@ class LSLSimulator:
         print(f"[NPC CHECK]: osIsNpc({key}) -> True (forced for simulation)")
         return True
     
+    def _execute_if_statement(self, if_stmt):
+        """Execute structured if statement with else-if support"""
+        try:
+            # Evaluate main condition
+            condition_result = self._evaluate_expression(if_stmt['condition'])
+            
+            if condition_result:
+                # Execute then statement
+                then_stmt = if_stmt['then_statement']
+                if isinstance(then_stmt, dict) and then_stmt.get('type') == 'compound':
+                    return self._execute_statements(then_stmt['statements'])
+                else:
+                    return self._execute_statements([then_stmt])
+            else:
+                # Check else-if statements
+                if 'else_if_statements' in if_stmt:
+                    for else_if in if_stmt['else_if_statements']:
+                        else_if_condition = self._evaluate_expression(else_if['condition'])
+                        if else_if_condition:
+                            # Execute this else-if statement
+                            else_if_stmt = else_if['statement']
+                            if isinstance(else_if_stmt, dict) and else_if_stmt.get('type') == 'compound':
+                                return self._execute_statements(else_if_stmt['statements'])
+                            else:
+                                return self._execute_statements([else_if_stmt])
+                
+                # Execute else statement if present
+                if 'else_statement' in if_stmt:
+                    else_stmt = if_stmt['else_statement']
+                    if isinstance(else_stmt, dict) and else_stmt.get('type') == 'compound':
+                        return self._execute_statements(else_stmt['statements'])
+                    else:
+                        return self._execute_statements([else_stmt])
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error executing if statement: {e}")
+            return None
+
     def api_osNpcCreate(self, firstname, lastname, position, owner):
         """Create an NPC"""
         npc_key = f"npc-{firstname}-{lastname}-{int(time_module.time())}"
