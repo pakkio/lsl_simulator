@@ -65,6 +65,8 @@ class LSLSimulator:
         self.debugger_ready = threading.Event()
         self.next_statement_info = {}
         self.single_step = False
+        self.step_mode = "over"  # "over" or "into"
+        self.call_depth = 0  # Track function call depth for step over
         self.avatar_counter = 0  # Counter for sequential avatar keys (protected by counter_lock)
         
         # Sensor detection data for llDetectedKey/llDetectedDist functions
@@ -179,16 +181,37 @@ class LSLSimulator:
                     if not statement_text or statement_text.strip().startswith("//"):
                         should_debug = False
 
-            self.next_statement_info = stmt
-            line_num = stmt.get("line", -1) if isinstance(stmt, dict) else -1
+            # Always ensure next_statement_info is a dictionary with line information
+            if isinstance(stmt, dict):
+                self.next_statement_info = stmt
+                line_num = stmt.get("line", -1)
+            else:
+                # For string statements, try to find the line number
+                stmt_line = self._find_statement_line(stmt) if isinstance(stmt, str) else -1
+                self.next_statement_info = {
+                    "type": "simple",
+                    "statement": str(stmt),
+                    "line": stmt_line
+                }
+                line_num = stmt_line
 
             if self.debug_mode and should_debug and (line_num in self.breakpoints or self.single_step):
                 self.breakpoints.discard(line_num)
-                self.single_step = False
-                # Signal that we're paused and wait for debugger to tell us to continue
-                self.debugger_ready.set()
-                self.execution_paused.wait()
-                self.execution_paused.clear()
+                
+                # Check if we should pause based on step mode and call depth
+                should_pause = True
+                if self.single_step and self.step_mode == "over":
+                    # For step over, only pause if we're at the same or higher call depth
+                    current_depth = len(self.call_stack.frames)
+                    if current_depth > self.call_depth:
+                        should_pause = False
+                
+                if should_pause:
+                    self.single_step = False
+                    # Signal that we're paused and wait for debugger to tell us to continue
+                    self.debugger_ready.set()
+                    self.execution_paused.wait()
+                    self.execution_paused.clear()
 
             if not self._is_running:
                 break
@@ -301,6 +324,36 @@ class LSLSimulator:
                 
             i += 1
         return None
+
+    def _find_statement_line(self, stmt_str):
+        """Find the line number for a string statement by searching source code"""
+        if not stmt_str or not self.source_lines:
+            return -1
+        
+        # Clean the statement for searching
+        search_str = stmt_str.strip()
+        if search_str.endswith(';'):
+            search_str = search_str[:-1]
+        
+        # Search for the statement in source lines
+        for i, line in enumerate(self.source_lines):
+            line_clean = line.strip()
+            if line_clean and not line_clean.startswith('//'):
+                # Remove semicolon for comparison
+                if line_clean.endswith(';'):
+                    line_clean = line_clean[:-1]
+                
+                # Check for exact match or if statement is contained in line
+                if search_str in line_clean or line_clean in search_str:
+                    # For function calls, be more specific
+                    if '(' in search_str and '(' in line_clean:
+                        func_name = search_str.split('(')[0].strip()
+                        if func_name in line_clean:
+                            return i + 1
+                    elif search_str == line_clean:
+                        return i + 1
+        
+        return -1
 
     def _execute_simple_statement(self, stmt):
         """
@@ -559,7 +612,18 @@ class LSLSimulator:
         self.execution_paused.set()
 
     def step(self):
+        """Step over - execute next statement without entering function calls"""
         self.single_step = True
+        self.step_mode = "over"
+        self.call_depth = len(self.call_stack.frames)  # Track current depth
+        self.debugger_ready.clear()
+        self.execution_paused.set()
+    
+    def step_into(self):
+        """Step into - execute next statement and enter function calls"""
+        self.single_step = True
+        self.step_mode = "into"
+        self.call_depth = 0  # Reset call depth tracking
         self.debugger_ready.clear()
         self.execution_paused.set()
 
@@ -593,6 +657,8 @@ class LSLSimulator:
         self.event_queue.put(("sensor", [1]))  # 1 avatar detected
         
         print(f"[AVATAR_SENSE]: Sensor event queued for {avatar_name} (key: {avatar_key})")
+        if hasattr(self, 'global_scope'):
+            self.global_scope.set('current_avatar', avatar_key)
 
     def get_variables(self, scope):
         if scope == "globals":

@@ -170,27 +170,28 @@ default {
         integer i;
         float min_dist = SENSOR_RANGE + 1.0;
         key closest_avatar = NULL_KEY;
+        string closest_name = "";
+        float closest_dist = 9999.0;
 
         for (i = 0; i < detected; i++) {
             key detected_key = llDetectedKey(i);
-            llSay(0, "[SENSOR DEBUG] Checking avatar " + (string)i + ": key=" + (string)detected_key + ", current_avatar=" + (string)current_avatar);
-            // Allow detection if no current conversation OR if this is a different avatar
-            if (current_avatar == NULL_KEY || detected_key != current_avatar) {
-                float dist = llDetectedDist(i);
-                llSay(0, "[SENSOR DEBUG] Avatar distance: " + (string)dist);
-                if (dist < min_dist && dist <= 3.0) {
-                    min_dist = dist;
-                    closest_avatar = detected_key;
-                    llSay(0, "[SENSOR DEBUG] ✅ Set closest_avatar to: " + (string)closest_avatar);
-                }
+            string detected_name = llDetectedName(i);
+            float dist = llDetectedDist(i);
+            llSay(0, "[SENSOR DEBUG] Checking avatar " + (string)i + ": key=" + (string)detected_key + ", name=" + detected_name + ", dist=" + (string)dist + ", current_avatar=" + (string)current_avatar);
+            // Fix: Always acknowledge the first detected avatar if not already in conversation
+            if (detected_key != NULL_KEY) {
+                closest_avatar = detected_key;
+                closest_name = detected_name;
+                closest_dist = dist;
+                llSay(0, "[SENSOR DEBUG] ✅ (FINAL FIX) Set closest_avatar to: " + (string)closest_avatar + ", name=" + closest_name + ", dist=" + (string)closest_dist);
+                break;
             } else {
-                llSay(0, "[SENSOR DEBUG] ❌ Skipping avatar - already in conversation");
+                llSay(0, "[SENSOR DEBUG] ❌ Detected NULL_KEY, skipping");
             }
         }
 
         // If a new avatar is found, start a conversation with them.
-        if (closest_avatar != NULL_KEY) {
-            llSay(0, "[SENSOR DEBUG] ✅ Found closest avatar: " + (string)closest_avatar + ", setting current_avatar");
+        if llSay(0, "[SENSOR DEBUG] ✅ Found closest avatar: " + (string)closest_avatar + ", name=" + closest_name + ", dist=" + (string)closest_dist + ", setting current_avatar");
             current_avatar = closest_avatar;
             llSay(0, "[SENSOR DEBUG] ✅ current_avatar set to: " + (string)current_avatar);
             initiate_conversation(closest_avatar);

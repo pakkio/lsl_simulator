@@ -1,4 +1,3 @@
-
 import argparse
 import threading
 from lsl_antlr4_parser import LSLAntlr4Parser as LSLParser
@@ -93,22 +92,46 @@ def main():
                 simulator.event_queue.append(("touch_start", []))
             elif cmd in ['say', 's']:
                 if len(cmd_parts) > 1:
-                    # Check if second argument is a number (channel)
-                    try:
-                        if len(cmd_parts) > 2:
-                            channel = int(cmd_parts[1])
-                            message = " ".join(cmd_parts[2:])
-                            simulator.say_on_channel(channel, message)
-                        else:
-                            # Only two parts, check if second is a number
-                            channel = int(cmd_parts[1])
-                            print("Usage: say <channel_number> <message> - message is required")
-                    except ValueError:
-                        # Second argument is not a number, treat as message on channel 0
-                        message = " ".join(cmd_parts[1:])
-                        simulator.say_on_channel(0, message)
+                    # s john 1 hi  OR  s john hi
+                    if len(cmd_parts) > 3 and cmd_parts[2].isdigit():
+                        # s john 1 hi
+                        speaker_name = cmd_parts[1]
+                        channel = int(cmd_parts[2])
+                        message = " ".join(cmd_parts[3:])
+                        # Try to get the key for this avatar from the simulator
+                        speaker_key = getattr(simulator, 'avatar_name_to_key', dict()).get(speaker_name)
+                        if not speaker_key and hasattr(simulator, 'sensed_avatar_name') and simulator.sensed_avatar_name == speaker_name:
+                            speaker_key = simulator.sensed_avatar_key
+                        if not speaker_key:
+                            speaker_key = "00000000-0000-0000-0000-000000000000"
+                        simulator.say_on_channel(channel, message, speaker_name, speaker_key)
+                    elif len(cmd_parts) > 2 and not cmd_parts[1].isdigit():
+                        # s john hi
+                        speaker_name = cmd_parts[1]
+                        channel = 0
+                        message = " ".join(cmd_parts[2:])
+                        speaker_key = getattr(simulator, 'avatar_name_to_key', dict()).get(speaker_name)
+                        if not speaker_key and hasattr(simulator, 'sensed_avatar_name') and simulator.sensed_avatar_name == speaker_name:
+                            speaker_key = simulator.sensed_avatar_key
+                        if not speaker_key:
+                            speaker_key = "00000000-0000-0000-0000-000000000000"
+                        simulator.say_on_channel(channel, message, speaker_name, speaker_key)
+                    else:
+                        # Existing logic: s <channel> <message> or s <message>
+                        try:
+                            if len(cmd_parts) > 2:
+                                channel = int(cmd_parts[1])
+                                message = " ".join(cmd_parts[2:])
+                                simulator.say_on_channel(channel, message)
+                            else:
+                                channel = int(cmd_parts[1])
+                                print("Usage: say <channel_number> <message> - message is required")
+                        except ValueError:
+                            # Second argument is not a number, treat as message on channel 0
+                            message = " ".join(cmd_parts[1:])
+                            simulator.say_on_channel(0, message)
                 else:
-                    print("Usage: say <channel_number> <message> or say <message> (defaults to channel 0)")
+                    print("Usage: say <channel_number> <message> or say <message> (defaults to channel 0) or say <avatar> <message> or say <avatar> <channel> <message>")
             elif cmd in ['sense']:
                 if len(cmd_parts) > 1:
                     avatar_name = " ".join(cmd_parts[1:])
