@@ -507,53 +507,50 @@ class LSLParser:
             return []
         
         try:
-            # Create ANTLR parser for the statement block
-            input_stream = InputStream(body_code)
+            # Wrap the body code in a compound statement for proper parsing
+            wrapped_code = '{' + body_code + '}'
+            
+            # Create ANTLR parser for the wrapped statement block
+            input_stream = InputStream(wrapped_code)
             lexer = LSLLexer(input_stream)
             token_stream = CommonTokenStream(lexer)
             parser = GeneratedLSLParser(token_stream)
             
-            # Parse as a compound statement (statements within braces)
+            # Parse as a compound statement
             visitor = LSLStatementVisitor()
-            statements = []
             
-            # Try to parse individual statements
-            lines = body_code.strip().split(';')
-            for line in lines:
-                line = line.strip()
-                if line and not line.startswith('//'):
-                    try:
-                        # Parse as individual statement
-                        stmt_input = InputStream(line + ';')
-                        stmt_lexer = LSLLexer(stmt_input)
-                        stmt_tokens = CommonTokenStream(stmt_lexer)
-                        stmt_parser = GeneratedLSLParser(stmt_tokens)
-                        
-                        # Try parsing as different statement types
-                        try:
-                            stmt_tree = stmt_parser.statement()
-                            if stmt_tree:
-                                parsed_stmt = visitor.visit(stmt_tree)
-                                if parsed_stmt:
-                                    statements.append(parsed_stmt)
-                                else:
-                                    statements.append(line)  # Fallback to raw text
-                            else:
-                                statements.append(line)  # Fallback to raw text
-                        except Exception:
-                            statements.append(line)  # Fallback to raw text
-                    except Exception:
-                        statements.append(line)  # Fallback to raw text
+            try:
+                # Parse the compound statement
+                stmt_tree = parser.compoundStatement()
+                if stmt_tree:
+                    parsed_stmt = visitor.visit(stmt_tree)
+                    if parsed_stmt and parsed_stmt.get('type') == 'compound':
+                        return parsed_stmt.get('statements', [])
+                    else:
+                        # If we didn't get a compound statement, return the single statement
+                        return [parsed_stmt] if parsed_stmt else []
+            except Exception:
+                # If compound statement parsing fails, fall back to simple approach
+                pass
             
-            return statements
-            
-        except Exception as e:
-            # Fallback to simple line parsing if ANTLR fails
+            # Fallback: simple line-based parsing
             statements = []
             lines = body_code.split('\n')
             for line in lines:
                 line = line.strip()
                 if line and not line.startswith('//'):
+                    # Don't try to parse isolated braces or keywords
+                    if line not in ['{', '}', 'else', 'else if']:
+                        statements.append(line)
+            return statements
+            
+        except Exception as e:
+            # Final fallback to simple line parsing
+            statements = []
+            lines = body_code.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('//') and line not in ['{', '}']:
                     statements.append(line)
             return statements
     

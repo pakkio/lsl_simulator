@@ -510,7 +510,7 @@ class LSLExpandedAPI:
     # Utility functions
     def api_llGetRegionName(self) -> str:
         """Get region name"""
-        return "Sim Region"
+        return "Test Region"
     
     def api_llGetSimulatorHostname(self) -> str:
         """Get simulator hostname"""
@@ -704,6 +704,7 @@ class LSLExpandedAPI:
     
     def api_osNpcCreate(self, firstname: str, lastname: str, position: List[float], notecard: str) -> str:
         """Create NPC"""
+        print(f"Created {firstname} {lastname}")
         return f"npc-{firstname}-{lastname}-{uuid.uuid4()}"
     
     def api_osNpcRemove(self, npc: str) -> None:
@@ -1016,5 +1017,6 @@ class LSLExpandedAPI:
     
     def api_osIsNpc(self, key: str) -> bool:
         """Check if key is an NPC"""
+        print("osIsNpc")
         return key.startswith("npc-")
     

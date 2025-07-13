@@ -279,7 +279,7 @@ setup_corona_visual() {
     // Configures the visual appearance of the "corona" object.
     llSetAlpha(0.7, ALL_SIDES);
     llSetScale(<0.2, 0.2, 0.08>); // Crown-like proportions
-    // Crown texture would be set here in a real implementation
+    string crown_texture = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
     // A simple golden color is used for now.
 }
 

@@ -1,6 +1,6 @@
 import argparse
 import threading
-from lsl_antlr4_parser import LSLAntlr4Parser as LSLParser
+from lsl_antlr_parser import LSLParser
 from lsl_simulator import LSLSimulator
 from lsl_dialect import LSLDialect, set_dialect, get_dialect, parse_dialect_flag
 

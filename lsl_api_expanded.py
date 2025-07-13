@@ -728,7 +728,7 @@ class LSLAPIExpanded:
             return (0.5, 0.5)
 
         sensor_funcs = {
-            'llSensor': llSensor, 'llSensorRepeat': llSensorRepeat, 'llSensorRemove': llSensorRemove,
+            # Sensor functions are handled by simulator state
             'llDetectedName': llDetectedName, 'llDetectedKey': llDetectedKey, 'llDetectedOwner': llDetectedOwner,
             'llDetectedType': llDetectedType, 'llDetectedPos': llDetectedPos, 'llDetectedVel': llDetectedVel,
             'llDetectedGrab': llDetectedGrab, 'llDetectedRot': llDetectedRot, 'llDetectedGroup': llDetectedGroup,

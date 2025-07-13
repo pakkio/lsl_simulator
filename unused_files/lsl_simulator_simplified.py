@@ -522,3 +522,9 @@ class LSLSimulator:
                 
                 if matches:
                     self.event_queue.append(("listen", [channel, speaker_name, speaker_key, message]))
+
+    def simulate_avatar_sense(self, avatar_name):
+        """Simulate sensing an avatar."""
+        self.sensed_avatar_name = avatar_name
+        self.sensed_avatar_key = f"key-for-{avatar_name.replace(' ', '-')}"
+        self.event_queue.append(("sensor", [1]))

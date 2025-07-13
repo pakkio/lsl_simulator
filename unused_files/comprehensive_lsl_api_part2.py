@@ -651,7 +651,7 @@ class ComprehensiveLSLAPIPart2:
     
     def api_llKey2Name(self, key: str) -> str:
         """Convert key to name."""
-        if key == self.simulator.global_scope.get("llGetOwner", lambda: "")():
+        if key == self.simulator.api_llGetOwner():
             return "Test User"
         if hasattr(self.simulator, 'sensed_avatar_key') and key == self.simulator.sensed_avatar_key:
             return self.simulator.sensed_avatar_name
