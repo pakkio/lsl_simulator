@@ -26,7 +26,7 @@ class DeclarationCommand(StatementCommand):
     """Handles variable declarations."""
     
     def can_execute(self, stmt: Dict[str, Any]) -> bool:
-        return stmt.get("type") == "declaration"
+        return stmt.get("type") in ["declaration", "variable_declaration"]
     
     def execute(self, stmt: Dict[str, Any], simulator) -> Any:
         var_name = stmt["name"]
@@ -36,7 +36,8 @@ class DeclarationCommand(StatementCommand):
             evaluated_value = simulator._evaluate_expression(var_value)
         else:
             # Default values based on LSL type
-            var_type = stmt.get("lsl_type", "string")
+            # Handle both old format (lsl_type) and new format (var_type)
+            var_type = stmt.get("lsl_type") or stmt.get("var_type", "string")
             evaluated_value = self._get_default_value(var_type)
         
         # Set the variable in the current scope
