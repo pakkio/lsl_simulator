@@ -688,6 +688,14 @@ class LSLAPIExpanded:
 
     def _register_sensor_functions(self):
         """Register sensor functions (19 functions)"""
+        def llDetectedName(number):
+            if 0 <= number < len(self.sensors):
+                return f"Avatar_{number}"  # Simulate detected name
+            return ""
+        def llDetectedKey(number):
+            if 0 <= number < len(self.sensors):
+                return str(uuid.uuid4())  # Simulate detected key
+            return "00000000-0000-0000-0000-000000000000"
         def llDetectedOwner(number):
             if 0 <= number < len(self.sensors):
                 return str(uuid.uuid4())  # Simulate owner
@@ -960,6 +968,23 @@ class LSLAPIExpanded:
             """Sends instant message to specific user"""
             print(f"IM to {user}: {message}")
             
+        def llListen(channel, name, id, msg):
+            """Starts listening on a channel"""
+            handle = len(self.listeners) + 1
+            self.listeners[handle] = {
+                'channel': channel,
+                'name': name,
+                'id': id,
+                'msg': msg
+            }
+            print(f"Listening on channel {channel} with handle {handle}")
+            return handle
+            
+        def llListenRemove(handle):
+            """Removes a listen handle"""
+            if handle in self.listeners:
+                del self.listeners[handle]
+                print(f"Removed listen handle {handle}")
             
         def llDetectedDist(number):
             """Returns distance to detected object"""

@@ -160,32 +160,20 @@ class LSLSimulator:
                 }
                 line_num = stmt_line
 
-            if self.debug_mode and should_debug and (line_num in self.breakpoints or self.single_step):
-                # Don't remove breakpoints when hit - keep them active
-                
-                # Check if we should pause based on step mode and call depth
-                should_pause = True
-                if self.single_step and self.step_mode == "over":
-                    # For step over, only pause if we're at the same or higher call depth
-                    current_depth = len(self.call_stack.frames)
-                    if current_depth > self.call_depth:
-                        should_pause = False
-                
-                if should_pause:
-                    self.single_step = False
-                    # Signal that we're paused and wait for debugger to tell us to continue
-                    self.debugger_ready.set()
-                    self.execution_paused.wait()
-                    self.execution_paused.clear()
-
             if not self._is_running:
                 break
 
+            # Execute the statement first
             return_value = None
             if isinstance(stmt, dict):
                 stmt_type = stmt.get("type")
                 if stmt_type == "simple" or stmt_type == "declaration":
                     return_value = self._execute_simple_statement(stmt)
+                elif stmt_type == "expression_statement":
+                    # Handle expression statements by executing the expression
+                    expression = stmt.get("expression", "")
+                    if expression:
+                        return_value = self._execute_simple_statement({"type": "simple", "statement": expression})
                 elif stmt_type == "assignment":
                     return_value = self._execute_assignment_statement(stmt)
                 elif stmt_type == "if":
@@ -212,39 +200,29 @@ class LSLSimulator:
                         i += 1
                         continue
                     
-                    # Handle legacy string-based if statements for compatibility
-                    if stmt_str.startswith("if (") and stmt_str.endswith(") {"):
-                        # Extract condition and evaluate
-                        condition = stmt_str[4:-3]  # Remove "if (" and ") {"
-                        condition_result = self._evaluate_expression(condition)
-                        
-                        # Simple if handling - skip complex parsing for now
-                        # This should be replaced by proper ANTLR parsing
-                        i += 1
-                        continue
-                    
-                    # Handle else statements (standalone)
-                    if stmt_str == "} else {" or stmt_str.startswith("else") or stmt_str.startswith("} else if ("):
-                        # This should be handled by if statement logic above
-                        i += 1
-                        continue
-                    
-                    # Skip braces (they're structural, not executable)
-                    if stmt_str in ["{", "}"]:
-                        i += 1
-                        continue
-                        
-                    # Handle regular statements
-                    if stmt_str.endswith(";"):
-                        stmt_str = stmt_str[:-1]
-                    
-                    # Create structured statement
-                    structured_stmt = {
-                        "type": "simple",
-                        "statement": stmt_str
-                    }
-                    return_value = self._execute_simple_statement(structured_stmt)
+                    # Handle structured statements
+                    return_value = self._execute_simple_statement({"type": "simple", "statement": stmt_str})
             
+            # Then check for debug pause AFTER execution
+            if self.debug_mode and should_debug and (line_num in self.breakpoints or self.single_step):
+                # Don't remove breakpoints when hit - keep them active
+                
+                # Check if we should pause based on step mode and call depth
+                should_pause = True
+                if self.single_step and self.step_mode == "over":
+                    # For step over, only pause if we're at the same or higher call depth
+                    current_depth = len(self.call_stack.frames)
+                    if current_depth > self.call_depth:
+                        should_pause = False
+                
+                if should_pause:
+                    self.single_step = False
+                    # Signal that we're paused and wait for debugger to tell us to continue
+                    self.debugger_ready.set()
+                    self.execution_paused.wait()
+                    self.execution_paused.clear()
+            
+            # Check for early return
             if return_value is not None:
                 return return_value
                 
@@ -450,6 +428,39 @@ class LSLSimulator:
         
         return return_value
 
+    def _call_api_function(self, func_name, args):
+        """Call an API function - either built-in LSL function or user-defined function."""
+        # First check if it's a user-defined function
+        if func_name in self.user_functions:
+            return self._call_user_function(func_name, args)
+        
+        # Then check if it's a built-in LSL function
+        # Try direct method name first (e.g., llSay)
+        if hasattr(self, func_name):
+            func = getattr(self, func_name)
+            if callable(func):
+                print(f"[LSL API - HASATTR PATH]: {func_name} called with {args}")
+                return func(*args)
+        
+        # Try with api_ prefix for extended API functions
+        api_method_name = f"api_{func_name}"
+        if hasattr(self, api_method_name):
+            func = getattr(self, api_method_name)
+            if callable(func):
+                print(f"[LSL API]: {func_name} called with {args}")
+                return func(*args)
+        
+        # Handle through the extended API if available
+        if hasattr(self, 'lsl_api') and hasattr(self.lsl_api, func_name):
+            func = getattr(self.lsl_api, func_name)
+            if callable(func):
+                print(f"[LSL API]: {func_name} called with {args}")
+                return func(*args)
+        
+        # Function not found
+        print(f"[LSL API]: Unknown function: {func_name}")
+        return None
+
     def run(self):
         # Thread-safe event queue operations
         print("[SIMULATOR] 🚀 run() method called - Queueing state_entry event")
@@ -630,6 +641,13 @@ class LSLSimulator:
         Delegate all API calls to the consolidated LSL API.
         This eliminates dangerous redundancy by ensuring single source of truth.
         """
+        # Don't create placeholders for user-defined functions
+        if hasattr(self, 'user_functions'):
+            # Check both direct name and api_ prefixed name
+            base_name = name[4:] if name.startswith('api_') else name
+            if base_name in self.user_functions:
+                raise AttributeError(f"'{base_name}' is a user-defined function, not an attribute")
+        
         if name.startswith('api_'):
             # Remove 'api_' prefix and delegate to consolidated API
             func_name = name[4:]  # Remove 'api_' prefix

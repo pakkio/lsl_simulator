@@ -17,62 +17,80 @@ class SimpleExpressionEvaluator:
     
     def __init__(self, simulator):
         self.simulator = simulator
+        self._evaluation_depth = 0
+        self._max_depth = 50  # Prevent infinite recursion
     
     def evaluate(self, expr_str: str) -> Any:
         """
         Evaluate an expression directly without complex architecture.
         Handles the 90% case simply, falls back gracefully for edge cases.
         """
-        if not expr_str:
-            return None
+        # Prevent infinite recursion
+        self._evaluation_depth += 1
+        if self._evaluation_depth > self._max_depth:
+            print(f"[WARNING] Expression evaluation depth exceeded for: {expr_str[:100]}")
+            self._evaluation_depth -= 1
+            return str(expr_str)  # Return as string to avoid infinite loop
         
-        original_expr_str = str(expr_str)
-        expr_str = original_expr_str.strip()
-        
-        # Handle empty string after stripping
-        if not expr_str:
-            return original_expr_str
-        
-        # Handle most common cases first (performance optimization)
-        
-        # 1. String literals (very common)
-        if expr_str.startswith('"') and expr_str.endswith('"') and expr_str.count('"') == 2:
-            return expr_str[1:-1]
-        
-        # 2. Numbers (very common)
-        if expr_str.isdigit():
-            return int(expr_str)
-        
-        if re.match(r'^-?\d+$', expr_str):
-            return int(expr_str)
-        
-        if re.match(r'^-?\d*\.\d+$', expr_str):
-            return float(expr_str)
-        
-        # 3. Variables (very common)
-        if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', expr_str):
-            return self._lookup_variable(expr_str)
-        
-        # 4. Component access (common in LSL) - but not if it's a vector/list literal
-        if ('.' in expr_str and not self._is_url_or_ip(expr_str) and 
-            not (expr_str.startswith('<') and expr_str.endswith('>')) and
-            not (expr_str.startswith('[') and expr_str.endswith(']'))):
-            return self._evaluate_component_access(expr_str)
-        
-        # 5. Function calls (common)
-        if '(' in expr_str and expr_str.endswith(')'):
-            return self._evaluate_function_call(expr_str)
-        
-        # 6. Vector literals (common in LSL)
-        if expr_str.startswith('<') and expr_str.endswith('>'):
-            return self._evaluate_vector_literal(expr_str)
-        
-        # 7. List literals (less common)
-        if expr_str.startswith('[') and expr_str.endswith(']'):
-            return self._evaluate_list_literal(expr_str)
-        
-        # 8. Binary operations (handle last due to complexity)
-        return self._evaluate_binary_operation(expr_str)
+        try:
+            if not expr_str:
+                return None
+            
+            original_expr_str = str(expr_str)
+            expr_str = original_expr_str.strip()
+            
+            # Handle empty string after stripping
+            if not expr_str:
+                return original_expr_str
+            
+            # Handle most common cases first (performance optimization)
+            
+            # 1. String literals (very common)
+            if expr_str.startswith('"') and expr_str.endswith('"') and expr_str.count('"') == 2:
+                return expr_str[1:-1]
+            
+            # 2. Numbers (very common)
+            if expr_str.isdigit():
+                return int(expr_str)
+            
+            if re.match(r'^-?\d+$', expr_str):
+                return int(expr_str)
+            
+            if re.match(r'^-?\d*\.\d+$', expr_str):
+                return float(expr_str)
+            
+            # 3. Variables (very common)
+            if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', expr_str):
+                return self._lookup_variable(expr_str)
+            
+            # 4. Component access (common in LSL) - but not if it's a vector/list literal
+            if ('.' in expr_str and not self._is_url_or_ip(expr_str) and 
+                not (expr_str.startswith('<') and expr_str.endswith('>')) and
+                not (expr_str.startswith('[') and expr_str.endswith(']'))):
+                return self._evaluate_component_access(expr_str)
+            
+            # 5. Type casting (before function calls since they both use parentheses)
+            if expr_str.startswith('(') and ')' in expr_str:
+                type_cast_result = self._evaluate_type_cast(expr_str)
+                if type_cast_result is not None:
+                    return type_cast_result
+            
+            # 6. Function calls (common)
+            if '(' in expr_str and expr_str.endswith(')'):
+                return self._evaluate_function_call(expr_str)
+            
+            # 7. Vector literals (common in LSL)
+            if expr_str.startswith('<') and expr_str.endswith('>'):
+                return self._evaluate_vector_literal(expr_str)
+            
+            # 8. List literals (less common)
+            if expr_str.startswith('[') and expr_str.endswith(']'):
+                return self._evaluate_list_literal(expr_str)
+            
+            # 9. Binary operations (handle last due to complexity)
+            return self._evaluate_binary_operation(expr_str)
+        finally:
+            self._evaluation_depth -= 1
     
     def _lookup_variable(self, name: str) -> Any:
         """Look up variable value."""
@@ -123,7 +141,10 @@ class SimpleExpressionEvaluator:
             args = self._parse_arguments(args_str)
         
         # Evaluate arguments
-        evaluated_args = [self.evaluate(arg) for arg in args]
+        evaluated_args = []
+        for i, arg in enumerate(args):
+            result = self.evaluate(arg)
+            evaluated_args.append(result)
         
         # Call function
         return self.simulator._call_api_function(func_name, evaluated_args)
@@ -317,3 +338,56 @@ class SimpleExpressionEvaluator:
             return left % right if right != 0 else 0
         except TypeError:
             return 0
+    
+    def _evaluate_type_cast(self, expr_str: str) -> Any:
+        """Evaluate type casting expressions like (string)variable or (integer)value."""
+        # Check if this looks like a type cast: (type)expression
+        import re
+        match = re.match(r'^\(\s*(string|integer|float|key|vector|rotation|list)\s*\)\s*(.+)$', expr_str)
+        if not match:
+            return None  # Not a type cast
+        
+        cast_type, expression = match.groups()
+        cast_type = cast_type.strip()
+        expression = expression.strip()
+        
+        # Evaluate the expression to cast
+        value = self.evaluate(expression)
+        
+        # Perform the type cast
+        if cast_type == 'string':
+            return str(value)
+        elif cast_type == 'integer':
+            try:
+                if isinstance(value, str):
+                    # LSL behavior: try to parse as int, return 0 if failed
+                    try:
+                        return int(float(value))  # Handle "1.5" -> 1
+                    except ValueError:
+                        return 0
+                return int(value)
+            except (ValueError, TypeError):
+                return 0
+        elif cast_type == 'float':
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return 0.0
+        elif cast_type == 'key':
+            return str(value)  # Keys are strings in LSL
+        elif cast_type == 'vector':
+            # Simple vector casting - in real LSL this is more complex
+            if isinstance(value, list) and len(value) >= 3:
+                return value[:3]
+            return [0.0, 0.0, 0.0]
+        elif cast_type == 'rotation':
+            # Simple rotation casting - in real LSL this is more complex
+            if isinstance(value, list) and len(value) >= 4:
+                return value[:4]
+            return [0.0, 0.0, 0.0, 1.0]
+        elif cast_type == 'list':
+            if isinstance(value, list):
+                return value
+            return [value]
+        
+        return value  # Fallback
